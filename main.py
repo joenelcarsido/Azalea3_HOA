@@ -1,11 +1,18 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 app = FastAPI()
 
-# Serve static files (login.html, dashboard.html, css, js, etc.)
+# Serve static files (HTML, CSS, JS)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+# ---- Login Page ----
+@app.get("/")
+def login_page():
+    return FileResponse("static/login.html")
 
 
 # ---- Login API ----
@@ -21,11 +28,3 @@ def login(data: LoginData):
         return {"message": "Login successful"}
 
     raise HTTPException(status_code=401, detail="Invalid username or password")
-
-from fastapi import FastAPI
-
-app = FastAPI()
-
-@app.get("/")
-def root():
-    return {"message": "Azalea HOA API is running"}
