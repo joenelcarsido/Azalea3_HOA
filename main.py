@@ -21,3 +21,11 @@ def login(data: LoginData):
         return {"message": "Login successful"}
 
     raise HTTPException(status_code=401, detail="Invalid username or password")
+
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+def root():
+    return {"message": "Azalea HOA API is running"}
