@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>HOA Dashboard</title>
+
+    <!-- 🔐 Protect dashboard -->
+    <script>
+        if (localStorage.getItem("isLoggedIn") !== "true") {
+            window.location.href = "/static/login.html";
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            margin: 0;
+            padding: 20px;
+        }
+
+        header {
+            background: #1e3a8a;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+        .card h3 {
+            margin: 0;
+            color: #374151;
+        }
+
+        .card p {
+            font-size: 24px;
+            margin: 10px 0 0;
+            color: #111827;
+        }
+
+        .section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+        }
+
+        th {
+            background: #f9fafb;
+        }
+
+        .logout {
+            background: #dc2626;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .logout:hover {
+            background: #b91c1c;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <h1>Welcome to HOA Dashboard</h1>
+        <p>Overview of your Homeowners Association</p>
+    </div>
+
+    <button class="logout" onclick="logout()">Logout</button>
+</header>
+
+<div class="cards">
+    <div class="card">
+        <h3>Total Members</h3>
+        <p>128</p>
+    </div>
+    <div class="card">
+        <h3>Active Units</h3>
+        <p>112</p>
+    </div>
+    <div class="card">
+        <h3>Pending Requests</h3>
+        <p>5</p>
+    </div>
+    <div class="card">
+        <h3>Monthly Dues</h3>
+        <p>P300.00</p>
+    </div>
+</div>
+
+<div class="section">
+    <h2>Recent Activity</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Resident</th>
+                <th>Activity</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>2026-01-04</td>
+                <td>John Doe</td>
+                <td>Maintenance Request</td>
+                <td>Open</td>
+            </tr>
+            <tr>
+                <td>2026-01-03</td>
+                <td>Jane Smith</td>
+                <td>Payment Submitted</td>
+                <td>Completed</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+function logout() {
+    localStorage.removeItem("isLoggedIn");
+    window.location.href = "/static/login.html";
+}
+</script>
+
+</body>
+</html>
