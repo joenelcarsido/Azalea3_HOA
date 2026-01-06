@@ -1,10 +1,23 @@
-from flask import Flask
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-app = Flask(__name__)
+app = FastAPI()
 
-@app.route("/")
-def home():
-    return "Azalea HOA app is running 🚀"
+# Serve static files (login.html, dashboard.html, css, js, etc.)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+
+# ---- Login API ----
+class LoginData(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/login")
+def login(data: LoginData):
+    # TEMP credentials (replace with database later)
+    if data.username == "admin" and data.password == "admin":
+        return {"message": "Login successful"}
+
+    raise HTTPException(status_code=401, detail="Invalid username or password")
