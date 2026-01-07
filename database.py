@@ -1,32 +1,32 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+import sqlite3
 
-DATABASE_URL = "sqlite:///./hoa.db"
+DB_NAME = "hoa.db"
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False}
-)
+def get_connection():
+    return sqlite3.connect(DB_NAME)
 
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
+def init_db():
+    conn = get_connection()
+    cur = conn.cursor()
 
-Base = declarative_base()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL
+    )
+    """)
 
-# Dependency
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        status TEXT NOT NULL,
+        uploaded_at TEXT NOT NULL
+    )
+    """)
 
-
-
-
-
-
+    conn.commit()
+    conn.close()
