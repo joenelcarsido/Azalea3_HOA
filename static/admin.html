@@ -17,7 +17,6 @@
 </head>
 <body>
 
-<!-- NAVBAR -->
 <nav class="navbar navbar-dark bg-dark mb-4">
   <div class="container">
     <span class="navbar-brand">🛠 HOA Admin Dashboard</span>
@@ -29,25 +28,19 @@
 
   <!-- SUMMARY -->
   <div class="row mb-4">
-    <div class="col-md-3">
+    <div class="col-md-4">
       <div class="card p-3 text-center">
-        <h6>Pending</h6>
+        <h6>Pending Payments</h6>
         <h2 id="pendingCount">0</h2>
       </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-4">
       <div class="card p-3 text-center">
         <h6>Total Payments</h6>
         <h2 id="totalCount">0</h2>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card p-3 text-center">
-        <h6>Users</h6>
-        <h2 id="userCount">0</h2>
-      </div>
-    </div>
-    <div class="col-md-3">
+    <div class="col-md-4">
       <div class="card p-3 text-center">
         <h6>Admin</h6>
         <strong id="adminName"></strong>
@@ -57,7 +50,7 @@
 
   <!-- PAYMENTS -->
   <div class="card p-3 mb-4">
-    <h5>Payments</h5>
+    <h5>Payment Approvals</h5>
 
     <div class="table-responsive">
       <table class="table table-striped align-middle">
@@ -65,9 +58,10 @@
           <tr>
             <th>ID</th>
             <th>User</th>
-            <th>Receipt</th>
+            <th>Month</th>
+            <th>Year</th>
             <th>Status</th>
-            <th>Date</th>
+            <th>Receipt</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -85,9 +79,8 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>User</th>
+            <th>Username</th>
             <th>Role</th>
-            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="usersTable"></tbody>
@@ -98,7 +91,6 @@
 </div>
 
 <script>
-/* ---------- AUTH ---------- */
 const username = localStorage.getItem("username");
 const role = localStorage.getItem("role");
 
@@ -108,13 +100,10 @@ if (!username || role !== "admin") {
 
 document.getElementById("adminName").innerText = username;
 
-let payments = [];
-let users = [];
-
 /* ---------- PAYMENTS ---------- */
 async function loadPayments() {
   const res = await fetch(`/api/admin/payments?username=${username}`);
-  payments = await res.json();
+  const payments = await res.json();
 
   document.getElementById("totalCount").innerText = payments.length;
   document.getElementById("pendingCount").innerText =
@@ -125,9 +114,16 @@ async function loadPayments() {
       <tr>
         <td>${p[0]}</td>
         <td>${p[1]}</td>
-        <td><span class="clickable" onclick="viewReceipt('${p[2]}')">View</span></td>
-        <td><span class="badge ${p[3] === 'PENDING' ? 'badge-pending' : 'badge-approved'}">${p[3]}</span></td>
-        <td>${p[4]}</td>
+        <td>${p[5]}</td>
+        <td>${p[6]}</td>
+        <td>
+          <span class="badge ${p[3] === "PENDING" ? "badge-pending" : "badge-approved"}">
+            ${p[3]}
+          </span>
+        </td>
+        <td>
+          <span class="clickable" onclick="viewReceipt('${p[2]}')">View</span>
+        </td>
         <td>
           ${p[3] === "PENDING"
             ? `<button class="btn btn-sm btn-success" onclick="approve(${p[0]})">Approve</button>`
@@ -138,7 +134,7 @@ async function loadPayments() {
 }
 
 async function approve(id) {
-  if (!confirm("Approve payment?")) return;
+  if (!confirm("Approve this payment?")) return;
   await fetch(`/api/admin/approve/${id}?username=${username}`, { method: "POST" });
   loadPayments();
 }
@@ -150,9 +146,7 @@ function viewReceipt(file) {
 /* ---------- USERS ---------- */
 async function loadUsers() {
   const res = await fetch(`/api/admin/users?username=${username}`);
-  users = await res.json();
-
-  document.getElementById("userCount").innerText = users.length;
+  const users = await res.json();
 
   document.getElementById("usersTable").innerHTML =
     users.map((u, i) => `
@@ -160,26 +154,8 @@ async function loadUsers() {
         <td>${i + 1}</td>
         <td>${u[0]}</td>
         <td>${u[1]}</td>
-        <td>
-          <button class="btn btn-sm btn-warning" onclick="resetPassword('${u[0]}')">Reset</button>
-          <button class="btn btn-sm btn-danger" onclick="disableUser('${u[0]}')">Disable</button>
-          <button class="btn btn-sm btn-info" onclick="viewHistory('${u[0]}')">History</button>
-        </td>
       </tr>
     `).join("");
-}
-
-/* ---------- PLACEHOLDERS (BACKEND NEXT) ---------- */
-function resetPassword(user) {
-  alert("Reset password for " + user + " (backend next)");
-}
-
-function disableUser(user) {
-  alert("Disable user " + user + " (backend next)");
-}
-
-function viewHistory(user) {
-  alert("View payment history for " + user + " (backend next)");
 }
 
 /* ---------- LOGOUT ---------- */
