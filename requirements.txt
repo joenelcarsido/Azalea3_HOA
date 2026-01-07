@@ -2,3 +2,4 @@ fastapi
 uvicorn
 passlib[bcrypt]
 python-multipart
+passlib[argon2]
