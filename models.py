@@ -23,3 +23,4 @@ class Payment(Base):
     status = Column(String, default="PENDING")
     receipt_path = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
