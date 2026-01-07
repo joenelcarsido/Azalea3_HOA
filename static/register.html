@@ -18,4 +18,96 @@
       max-width: 420px;
       padding: 30px;
       border-radius: 12px;
-      box-shadow: 0 10px 25p
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+
+<div class="register-card">
+  <h3 class="text-center mb-4">HOA User Registration</h3>
+
+  <div class="mb-3">
+    <label class="form-label">Username</label>
+    <input type="text" id="username" class="form-control" placeholder="Choose a username" />
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Password</label>
+    <input type="password" id="password" class="form-control" placeholder="Create a password" />
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Confirm Password</label>
+    <input type="password" id="confirmPassword" class="form-control" placeholder="Confirm password" />
+  </div>
+
+  <div id="error" class="text-danger mb-3" style="display:none"></div>
+  <div id="success" class="text-success mb-3" style="display:none"></div>
+
+  <button class="btn btn-success w-100" onclick="register()">Register</button>
+
+  <div class="text-center mt-3">
+    <a href="/static/login.html">Already have an account? Login</a>
+  </div>
+</div>
+
+<script>
+async function register() {
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value.trim();
+  const confirmPassword = document.getElementById("confirmPassword").value.trim();
+  const errorDiv = document.getElementById("error");
+  const successDiv = document.getElementById("success");
+
+  errorDiv.style.display = "none";
+  successDiv.style.display = "none";
+
+  if (!username || !password || !confirmPassword) {
+    errorDiv.innerText = "All fields are required";
+    errorDiv.style.display = "block";
+    return;
+  }
+
+  if (password.length < 6) {
+    errorDiv.innerText = "Password must be at least 6 characters";
+    errorDiv.style.display = "block";
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    errorDiv.innerText = "Passwords do not match";
+    errorDiv.style.display = "block";
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.detail || "Registration failed");
+    }
+
+    successDiv.innerText = "Registration successful. Redirecting to login...";
+    successDiv.style.display = "block";
+
+    setTimeout(() => {
+      window.location.href = "/static/login.html";
+    }, 1500);
+
+  } catch (err) {
+    errorDiv.innerText = err.message;
+    errorDiv.style.display = "block";
+  }
+}
+</script>
+
+</body>
+</html>
