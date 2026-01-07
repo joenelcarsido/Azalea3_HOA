@@ -13,14 +13,11 @@ from database import init_db
 # ---------------- CONFIG ----------------
 DB = "hoa.db"
 UPLOAD_DIR = "uploads"
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_FILE_SIZE = 5 * 1024 * 1024
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-pwd_context = CryptContext(
-    schemes=["argon2"],
-    deprecated="auto"
-)
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 # ---------------- DB HELPERS ----------------
 def get_db():
@@ -38,23 +35,19 @@ def is_admin(username: str):
     cur.execute("SELECT role FROM users WHERE username=?", (username,))
     row = cur.fetchone()
     conn.close()
-    return row is not None and row[0] == "admin"
+    return row and row[0] == "admin"
 
 # ---------------- ADMIN BOOTSTRAP ----------------
 def ensure_admin():
     conn = get_db()
     cur = conn.cursor()
-
     cur.execute("SELECT 1 FROM users WHERE username='admin'")
-    exists = cur.fetchone()
-
-    if not exists:
+    if not cur.fetchone():
         cur.execute(
-            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            "INSERT INTO users (username, password, role, is_active) VALUES (?, ?, ?, 1)",
             ("admin", hash_password("admin123"), "admin")
         )
         conn.commit()
-
     conn.close()
 
 # ---------------- APP SETUP ----------------
@@ -64,6 +57,7 @@ init_db()
 ensure_admin()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # ---------------- PAGE ROUTES ----------------
 @app.get("/")
@@ -87,9 +81,8 @@ class RegisterData(BaseModel):
     username: str
     password: str
 
-class ChangePasswordData(BaseModel):
-    username: str
-    old_password: str
+class ResetPasswordData(BaseModel):
+    target_user: str
     new_password: str
 
 # ---------------- AUTH ----------------
@@ -97,27 +90,24 @@ class ChangePasswordData(BaseModel):
 def register(data: RegisterData):
     conn = get_db()
     cur = conn.cursor()
-
     try:
         cur.execute(
-            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-            (data.username, hash_password(data.password), "homeowner")
+            "INSERT INTO users (username, password, role, is_active) VALUES (?, ?, 'homeowner', 1)",
+            (data.username, hash_password(data.password))
         )
         conn.commit()
     except sqlite3.IntegrityError:
         raise HTTPException(status_code=400, detail="Username already exists")
     finally:
         conn.close()
-
     return {"message": "Registration successful"}
 
 @app.post("/api/login")
 def login(data: LoginData):
     conn = get_db()
     cur = conn.cursor()
-
     cur.execute(
-        "SELECT password, role FROM users WHERE username=?",
+        "SELECT password, role, is_active FROM users WHERE username=?",
         (data.username,)
     )
     user = cur.fetchone()
@@ -126,44 +116,23 @@ def login(data: LoginData):
     if not user or not verify_password(data.password, user[0]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    if user[2] == 0:
+        raise HTTPException(status_code=403, detail="Account disabled")
+
     return {"username": data.username, "role": user[1]}
 
-@app.post("/api/change-password")
-def change_password(data: ChangePasswordData):
-    conn = get_db()
-    cur = conn.cursor()
-
-    cur.execute("SELECT password FROM users WHERE username=?", (data.username,))
-    user = cur.fetchone()
-
-    if not user or not verify_password(data.old_password, user[0]):
-        raise HTTPException(status_code=401, detail="Old password incorrect")
-
-    cur.execute(
-        "UPDATE users SET password=? WHERE username=?",
-        (hash_password(data.new_password), data.username)
-    )
-
-    conn.commit()
-    conn.close()
-
-    return {"message": "Password changed successfully"}
-
-# ---------------- RECEIPT UPLOAD ----------------
+# ---------------- RECEIPTS ----------------
 @app.post("/api/upload-receipt")
 async def upload_receipt(username: str, file: UploadFile = File(...)):
-
     if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".pdf")):
         raise HTTPException(status_code=400, detail="Invalid file type")
 
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large (max 5MB)")
+        raise HTTPException(status_code=400, detail="File too large")
 
     filename = f"{uuid.uuid4()}_{file.filename}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    with open(filepath, "wb") as f:
+    with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:
         f.write(contents)
 
     conn = get_db()
@@ -172,34 +141,87 @@ async def upload_receipt(username: str, file: UploadFile = File(...)):
         "INSERT INTO payments (username, filename, status, uploaded_at) VALUES (?, ?, 'PENDING', ?)",
         (username, filename, datetime.now().isoformat())
     )
-
     conn.commit()
     conn.close()
 
-    return {"message": "Receipt uploaded. Awaiting admin approval."}
+    return {"message": "Uploaded"}
 
-# ---------------- ADMIN ----------------
+# ---------------- ADMIN: USERS ----------------
 @app.get("/api/admin/users")
 def admin_users(username: str):
     if not is_admin(username):
-        raise HTTPException(status_code=403, detail="Admin access only")
+        raise HTTPException(status_code=403)
 
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT username, role FROM users ORDER BY username")
+    cur.execute("SELECT username, role, is_active FROM users ORDER BY username")
     users = cur.fetchall()
     conn.close()
-
     return users
 
+@app.post("/api/admin/disable-user/{target}")
+def disable_user(target: str, username: str):
+    if not is_admin(username):
+        raise HTTPException(status_code=403)
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET is_active=0 WHERE username=?", (target,))
+    conn.commit()
+    conn.close()
+    return {"message": "User disabled"}
+
+@app.post("/api/admin/enable-user/{target}")
+def enable_user(target: str, username: str):
+    if not is_admin(username):
+        raise HTTPException(status_code=403)
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET is_active=1 WHERE username=?", (target,))
+    conn.commit()
+    conn.close()
+    return {"message": "User enabled"}
+
+@app.post("/api/admin/reset-password")
+def reset_password(data: ResetPasswordData, username: str):
+    if not is_admin(username):
+        raise HTTPException(status_code=403)
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE users SET password=? WHERE username=?",
+        (hash_password(data.new_password), data.target_user)
+    )
+    conn.commit()
+    conn.close()
+    return {"message": "Password reset"}
+
+# ---------------- ADMIN: PAYMENTS ----------------
 @app.get("/api/admin/payments")
 def admin_payments(username: str):
     if not is_admin(username):
-        raise HTTPException(status_code=403, detail="Admin access only")
+        raise HTTPException(status_code=403)
 
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM payments")
+    cur.execute("SELECT * FROM payments ORDER BY uploaded_at DESC")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+@app.get("/api/admin/payments/{user}")
+def user_payment_history(user: str, username: str):
+    if not is_admin(username):
+        raise HTTPException(status_code=403)
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM payments WHERE username=? ORDER BY uploaded_at DESC",
+        (user,)
+    )
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -207,29 +229,53 @@ def admin_payments(username: str):
 @app.post("/api/admin/approve/{payment_id}")
 def approve_payment(payment_id: int, username: str):
     if not is_admin(username):
-        raise HTTPException(status_code=403, detail="Admin access only")
+        raise HTTPException(status_code=403)
 
     conn = get_db()
     cur = conn.cursor()
     cur.execute("UPDATE payments SET status='APPROVED' WHERE id=?", (payment_id,))
     conn.commit()
     conn.close()
+    return {"message": "Approved"}
 
-    return {"message": "Payment approved"}
+# ---------------- ANALYTICS ----------------
+@app.get("/api/admin/analytics")
+def analytics(username: str):
+    if not is_admin(username):
+        raise HTTPException(status_code=403)
 
-# ---------------- USER STATUS ----------------
-@app.get("/api/payment-status/{username}")
-def payment_status(username: str):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute(
-        "SELECT status, uploaded_at FROM payments WHERE username=? ORDER BY id DESC LIMIT 1",
-        (username,)
-    )
-    row = cur.fetchone()
+
+    cur.execute("SELECT COUNT(*) FROM users")
+    total_users = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM users WHERE is_active=1")
+    active_users = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM users WHERE is_active=0")
+    disabled_users = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM payments")
+    total_payments = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM payments WHERE status='PENDING'")
+    pending = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM payments WHERE status='APPROVED'")
+    approved = cur.fetchone()[0]
+
     conn.close()
 
-    if not row:
-        return {"status": "NO PAYMENT"}
-
-    return {"status": row[0], "uploaded_at": row[1]}
+    return {
+        "users": {
+            "total": total_users,
+            "active": active_users,
+            "disabled": disabled_users
+        },
+        "payments": {
+            "total": total_payments,
+            "pending": pending,
+            "approved": approved
+        }
+    }
