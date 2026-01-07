@@ -13,7 +13,7 @@ from database import init_db
 # ---------------- CONFIG ----------------
 DB = "hoa.db"
 UPLOAD_DIR = "uploads"
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_FILE_SIZE = 5 * 1024 * 1024
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -22,7 +22,7 @@ pwd_context = CryptContext(
     deprecated="auto"
 )
 
-# ---------------- DB HELPERS ----------------
+# ---------------- DB ----------------
 def get_db():
     return sqlite3.connect(DB, check_same_thread=False)
 
@@ -40,7 +40,7 @@ def is_admin(username: str):
     conn.close()
     return row and row[0] == "admin"
 
-# ---------------- ADMIN BOOTSTRAP ----------------
+# ---------------- ADMIN INIT ----------------
 def ensure_admin():
     conn = get_db()
     cur = conn.cursor()
@@ -55,7 +55,7 @@ def ensure_admin():
 
     conn.close()
 
-# ---------------- APP SETUP ----------------
+# ---------------- APP ----------------
 app = FastAPI()
 
 init_db()
@@ -64,7 +64,7 @@ ensure_admin()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# ---------------- PAGE ROUTES ----------------
+# ---------------- PAGES ----------------
 @app.get("/")
 def root():
     return FileResponse("static/login.html")
@@ -86,11 +86,6 @@ class RegisterData(BaseModel):
     username: str
     password: str
 
-class ChangePasswordData(BaseModel):
-    username: str
-    old_password: str
-    new_password: str
-
 # ---------------- AUTH ----------------
 @app.post("/api/register")
 def register(data: RegisterData):
@@ -104,7 +99,7 @@ def register(data: RegisterData):
         )
         conn.commit()
     except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="Username already exists")
+        raise HTTPException(400, "Username already exists")
     finally:
         conn.close()
 
@@ -123,32 +118,11 @@ def login(data: LoginData):
     conn.close()
 
     if not user or not verify_password(data.password, user[0]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(401, "Invalid credentials")
 
     return {"username": data.username, "role": user[1]}
 
-@app.post("/api/change-password")
-def change_password(data: ChangePasswordData):
-    conn = get_db()
-    cur = conn.cursor()
-
-    cur.execute("SELECT password FROM users WHERE username=?", (data.username,))
-    user = cur.fetchone()
-
-    if not user or not verify_password(data.old_password, user[0]):
-        raise HTTPException(status_code=401, detail="Old password incorrect")
-
-    cur.execute(
-        "UPDATE users SET password=? WHERE username=?",
-        (hash_password(data.new_password), data.username)
-    )
-
-    conn.commit()
-    conn.close()
-
-    return {"message": "Password changed successfully"}
-
-# ---------------- RECEIPT UPLOAD ----------------
+# ---------------- USER PAYMENTS ----------------
 @app.post("/api/upload-receipt")
 async def upload_receipt(
     username: str,
@@ -157,32 +131,32 @@ async def upload_receipt(
     file: UploadFile = File(...)
 ):
     if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".pdf")):
-        raise HTTPException(status_code=400, detail="Invalid file type")
+        raise HTTPException(400, "Invalid file type")
 
-    contents = await file.read()
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large (max 5MB)")
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(400, "File too large")
 
     filename = f"{uuid.uuid4()}_{file.filename}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
+    path = os.path.join(UPLOAD_DIR, filename)
 
-    with open(filepath, "wb") as f:
-        f.write(contents)
+    with open(path, "wb") as f:
+        f.write(content)
 
     conn = get_db()
     cur = conn.cursor()
 
     # Prevent duplicate payment for same month/year
     cur.execute(
-        "SELECT 1 FROM payments WHERE username=? AND month=? AND year=?",
+        """
+        SELECT 1 FROM payments
+        WHERE username=? AND month=? AND year=?
+        """,
         (username, month, year)
     )
     if cur.fetchone():
         conn.close()
-        raise HTTPException(
-            status_code=400,
-            detail="Payment for this month already submitted"
-        )
+        raise HTTPException(400, "Payment for this period already exists")
 
     cur.execute(
         """
@@ -196,9 +170,8 @@ async def upload_receipt(
     conn.commit()
     conn.close()
 
-    return {"message": "Receipt uploaded. Awaiting admin approval."}
+    return {"message": "Payment submitted for approval"}
 
-# ---------------- USER PAYMENTS ----------------
 @app.get("/api/user/payments/{username}")
 def user_payments(username: str):
     conn = get_db()
@@ -218,47 +191,23 @@ def user_payments(username: str):
     conn.close()
     return rows
 
-@app.get("/api/payment-status/{username}")
-def payment_status(username: str):
-    conn = get_db()
-    cur = conn.cursor()
-
-    cur.execute(
-        """
-        SELECT status, uploaded_at
-        FROM payments
-        WHERE username=?
-        ORDER BY uploaded_at DESC
-        LIMIT 1
-        """,
-        (username,)
-    )
-
-    row = cur.fetchone()
-    conn.close()
-
-    if not row:
-        return {"status": "NO PAYMENT"}
-
-    return {"status": row[0], "uploaded_at": row[1]}
-
 # ---------------- ADMIN ----------------
 @app.get("/api/admin/users")
 def admin_users(username: str):
     if not is_admin(username):
-        raise HTTPException(status_code=403, detail="Admin access only")
+        raise HTTPException(403)
 
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT username, role FROM users ORDER BY username")
-    users = cur.fetchall()
+    rows = cur.fetchall()
     conn.close()
-    return users
+    return rows
 
 @app.get("/api/admin/payments")
 def admin_payments(username: str):
     if not is_admin(username):
-        raise HTTPException(status_code=403, detail="Admin access only")
+        raise HTTPException(403)
 
     conn = get_db()
     cur = conn.cursor()
@@ -276,7 +225,7 @@ def admin_payments(username: str):
 @app.post("/api/admin/approve/{payment_id}")
 def approve_payment(payment_id: int, username: str):
     if not is_admin(username):
-        raise HTTPException(status_code=403, detail="Admin access only")
+        raise HTTPException(403)
 
     conn = get_db()
     cur = conn.cursor()
