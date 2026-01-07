@@ -53,10 +53,10 @@
   <div class="card p-3 mb-3">
     <div class="row g-2">
       <div class="col-md-6">
-        <input type="text" id="searchInput" class="form-control" placeholder="Search by username..." oninput="renderTable()">
+        <input type="text" id="searchInput" class="form-control" placeholder="Search by username..." oninput="renderPayments()">
       </div>
       <div class="col-md-3">
-        <select id="statusFilter" class="form-select" onchange="renderTable()">
+        <select id="statusFilter" class="form-select" onchange="renderPayments()">
           <option value="ALL">All</option>
           <option value="PENDING">Pending</option>
           <option value="APPROVED">Approved</option>
@@ -66,7 +66,7 @@
   </div>
 
   <!-- PAYMENTS TABLE -->
-  <div class="card p-3">
+  <div class="card p-3 mb-4">
     <h5 class="mb-3">Submitted Payments</h5>
 
     <div class="table-responsive">
@@ -90,32 +90,31 @@
     </div>
   </div>
 
+  <!-- USERS TABLE -->
+  <div class="card p-3">
+    <h5 class="mb-3">Registered Users</h5>
+
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Username</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody id="usersTable">
+          <tr>
+            <td colspan="3" class="text-center">Loading...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 <script>
-  
-  <!-- USERS TABLE -->
-<div class="card p-3 mt-4">
-  <h5 class="mb-3">Registered Users</h5>
-
-  <div class="table-responsive">
-    <table class="table table-striped align-middle">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Username</th>
-          <th>Role</th>
-        </tr>
-      </thead>
-      <tbody id="usersTable">
-        <tr>
-          <td colspan="3" class="text-center">Loading...</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
 /* ---------- AUTH GUARD ---------- */
 const username = localStorage.getItem("username");
 const role = localStorage.getItem("role");
@@ -128,14 +127,12 @@ document.getElementById("adminName").innerText = username;
 
 let payments = [];
 
-/* ---------- LOAD PAYMENTS ---------- */
+/* ---------- PAYMENTS ---------- */
 async function loadPayments() {
   const res = await fetch(`/api/admin/payments?username=${username}`);
-  const data = await res.json();
-
-  payments = data;
+  payments = await res.json();
   updateCounters();
-  renderTable();
+  renderPayments();
 }
 
 function updateCounters() {
@@ -144,64 +141,55 @@ function updateCounters() {
     payments.filter(p => p[3] === "PENDING").length;
 }
 
-/* ---------- RENDER TABLE ---------- */
-function renderTable() {
+function renderPayments() {
   const tbody = document.getElementById("paymentsTable");
   const search = document.getElementById("searchInput").value.toLowerCase();
   const filter = document.getElementById("statusFilter").value;
 
-  let filtered = payments.filter(p => {
-    const matchesUser = p[1].toLowerCase().includes(search);
-    const matchesStatus = filter === "ALL" || p[3] === filter;
-    return matchesUser && matchesStatus;
-  });
+  const filtered = payments.filter(p =>
+    p[1].toLowerCase().includes(search) &&
+    (filter === "ALL" || p[3] === filter)
+  );
 
-  if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center">No records found</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = filtered.map(p => `
-    <tr>
-      <td>${p[0]}</td>
-      <td>${p[1]}</td>
-      <td>
-        <span class="clickable text-primary" onclick="viewReceipt('${p[2]}')">
-          View
-        </span>
-      </td>
-      <td>
-        <span class="badge ${p[3] === 'PENDING' ? 'badge-pending' : 'badge-approved'}">
-          ${p[3]}
-        </span>
-      </td>
-      <td>${p[4]}</td>
-      <td>
-        ${
-          p[3] === "PENDING"
-            ? `<button class="btn btn-sm btn-success" onclick="approve(${p[0]})">Approve</button>`
-            : `<span class="text-muted">—</span>`
-        }
-      </td>
-    </tr>
-  `).join("");
+  tbody.innerHTML = filtered.length
+    ? filtered.map(p => `
+      <tr>
+        <td>${p[0]}</td>
+        <td>${p[1]}</td>
+        <td><span class="clickable text-primary" onclick="viewReceipt('${p[2]}')">View</span></td>
+        <td><span class="badge ${p[3] === 'PENDING' ? 'badge-pending' : 'badge-approved'}">${p[3]}</span></td>
+        <td>${p[4]}</td>
+        <td>${p[3] === 'PENDING'
+          ? `<button class="btn btn-sm btn-success" onclick="approve(${p[0]})">Approve</button>`
+          : '—'}</td>
+      </tr>
+    `).join("")
+    : `<tr><td colspan="6" class="text-center">No records found</td></tr>`;
 }
 
-/* ---------- ACTIONS ---------- */
 async function approve(id) {
   if (!confirm("Approve this payment?")) return;
-
-  const res = await fetch(`/api/admin/approve/${id}?username=${username}`, {
-    method: "POST"
-  });
-
-  if (res.ok) {
-    loadPayments();
-  }
+  await fetch(`/api/admin/approve/${id}?username=${username}`, { method: "POST" });
+  loadPayments();
 }
 
 function viewReceipt(filename) {
   window.open(`/uploads/${filename}`, "_blank");
+}
+
+/* ---------- USERS ---------- */
+async function loadUsers() {
+  const res = await fetch(`/api/admin/users?username=${username}`);
+  const users = await res.json();
+
+  const tbody = document.getElementById("usersTable");
+  tbody.innerHTML = users.map((u, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${u[0]}</td>
+      <td><span class="badge ${u[1] === 'admin' ? 'bg-dark' : 'bg-secondary'}">${u[1]}</span></td>
+    </tr>
+  `).join("");
 }
 
 /* ---------- LOGOUT ---------- */
@@ -211,8 +199,8 @@ function logout() {
 }
 
 loadPayments();
+loadUsers();
 </script>
 
 </body>
 </html>
-
