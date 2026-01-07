@@ -1,4 +1,3 @@
-from database import init_db
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -8,6 +7,8 @@ from datetime import datetime
 import sqlite3
 import os
 import uuid
+
+from database import init_db
 
 # ---------------- APP SETUP ----------------
 app = FastAPI()
@@ -24,18 +25,18 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ---------------- HELPERS ----------------
+def get_db():
+    return sqlite3.connect(DB)
+
 def hash_password(password: str):
     return pwd_context.hash(password)
 
 def verify_password(password: str, hashed: str):
     return pwd_context.verify(password, hashed)
 
-def get_db():
-    return sqlite3.connect(DB)
-
 # ---------------- ROOT ----------------
 @app.get("/")
-def login_page():
+def root():
     return FileResponse("static/login.html")
 
 # ---------------- MODELS ----------------
@@ -172,4 +173,5 @@ def payment_status(username: str):
 
     if not row:
         return {"status": "NO PAYMENT"}
+
     return {"status": row[0], "uploaded_at": row[1]}
