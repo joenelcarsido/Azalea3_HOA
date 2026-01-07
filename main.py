@@ -34,6 +34,14 @@ def hash_password(password: str):
 def verify_password(password: str, hashed: str):
     return pwd_context.verify(password, hashed)
 
+def is_admin(username: str):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT role FROM users WHERE username=?", (username,))
+    row = cur.fetchone()
+    conn.close()
+    return row and row[0] == "admin"
+
 # ---------------- ROOT ----------------
 @app.get("/")
 def root():
@@ -139,7 +147,10 @@ async def upload_receipt(username: str, file: UploadFile = File(...)):
 
 # ---------------- ADMIN ----------------
 @app.get("/api/admin/payments")
-def admin_payments():
+def admin_payments(username: str):
+    if not is_admin(username):
+        raise HTTPException(status_code=403, detail="Admin access only")
+
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM payments")
@@ -148,7 +159,10 @@ def admin_payments():
     return rows
 
 @app.post("/api/admin/approve/{payment_id}")
-def approve_payment(payment_id: int):
+def approve_payment(payment_id: int, username: str):
+    if not is_admin(username):
+        raise HTTPException(status_code=403, detail="Admin access only")
+
     conn = get_db()
     cur = conn.cursor()
     cur.execute("UPDATE payments SET status='APPROVED' WHERE id=?", (payment_id,))
