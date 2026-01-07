@@ -65,7 +65,11 @@
             <th>Action</th>
           </tr>
         </thead>
-        <tbody id="paymentsTable"></tbody>
+        <tbody id="paymentsTable">
+          <tr>
+            <td colspan="7" class="text-center">Loading...</td>
+          </tr>
+        </tbody>
       </table>
     </div>
   </div>
@@ -83,7 +87,11 @@
             <th>Role</th>
           </tr>
         </thead>
-        <tbody id="usersTable"></tbody>
+        <tbody id="usersTable">
+          <tr>
+            <td colspan="3" class="text-center">Loading...</td>
+          </tr>
+        </tbody>
       </table>
     </div>
   </div>
@@ -91,6 +99,7 @@
 </div>
 
 <script>
+/* ---------- AUTH ---------- */
 const username = localStorage.getItem("username");
 const role = localStorage.getItem("role");
 
@@ -109,6 +118,12 @@ async function loadPayments() {
   document.getElementById("pendingCount").innerText =
     payments.filter(p => p[3] === "PENDING").length;
 
+  if (!payments.length) {
+    document.getElementById("paymentsTable").innerHTML =
+      `<tr><td colspan="7" class="text-center">No payments found</td></tr>`;
+    return;
+  }
+
   document.getElementById("paymentsTable").innerHTML =
     payments.map(p => `
       <tr>
@@ -122,7 +137,7 @@ async function loadPayments() {
           </span>
         </td>
         <td>
-          <span class="clickable" onclick="viewReceipt('${p[2]}')">View</span>
+          <a href="/uploads/${p[2]}" target="_blank">View</a>
         </td>
         <td>
           ${p[3] === "PENDING"
@@ -139,14 +154,16 @@ async function approve(id) {
   loadPayments();
 }
 
-function viewReceipt(file) {
-  window.open(`/uploads/${file}`, "_blank");
-}
-
 /* ---------- USERS ---------- */
 async function loadUsers() {
   const res = await fetch(`/api/admin/users?username=${username}`);
   const users = await res.json();
+
+  if (!users.length) {
+    document.getElementById("usersTable").innerHTML =
+      `<tr><td colspan="3" class="text-center">No users found</td></tr>`;
+    return;
+  }
 
   document.getElementById("usersTable").innerHTML =
     users.map((u, i) => `
