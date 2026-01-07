@@ -67,8 +67,21 @@ async function register() {
   errorDiv.style.display = "none";
   successDiv.style.display = "none";
 
-  if (!username || !password) {
+  // 🔒 Prevent admin creation
+  if (username.toLowerCase() === "admin") {
+    errorDiv.innerText = "This username is reserved";
+    errorDiv.style.display = "block";
+    return;
+  }
+
+  if (!username || !password || !confirm) {
     errorDiv.innerText = "All fields are required";
+    errorDiv.style.display = "block";
+    return;
+  }
+
+  if (password.length < 6) {
+    errorDiv.innerText = "Password must be at least 6 characters";
     errorDiv.style.display = "block";
     return;
   }
@@ -95,6 +108,11 @@ async function register() {
     successDiv.innerText = "Registration successful! Redirecting to login...";
     successDiv.style.display = "block";
 
+    // Clear form
+    document.getElementById("username").value = "";
+    document.getElementById("password").value = "";
+    document.getElementById("confirm").value = "";
+
     setTimeout(() => {
       window.location.href = "/login";
     }, 1500);
@@ -104,6 +122,11 @@ async function register() {
     errorDiv.style.display = "block";
   }
 }
+
+// ✅ Allow Enter key to submit
+document.addEventListener("keypress", function (e) {
+  if (e.key === "Enter") register();
+});
 </script>
 
 </body>
