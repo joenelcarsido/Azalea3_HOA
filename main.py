@@ -17,7 +17,10 @@ MAX_FILE_SIZE = 5 * 1024 * 1024
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["argon2"],
+    deprecated="auto"
+)
 
 # ---------------- DB HELPERS ----------------
 def get_db():
@@ -44,7 +47,7 @@ def ensure_admin():
     cur.execute("SELECT 1 FROM users WHERE username='admin'")
     if not cur.fetchone():
         cur.execute(
-            "INSERT INTO users (username, password, role, is_active) VALUES (?, ?, ?, 1)",
+            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
             ("admin", hash_password("admin123"), "admin")
         )
         conn.commit()
@@ -52,7 +55,6 @@ def ensure_admin():
 
 # ---------------- APP SETUP ----------------
 app = FastAPI()
-
 init_db()
 ensure_admin()
 
@@ -81,10 +83,6 @@ class RegisterData(BaseModel):
     username: str
     password: str
 
-class ResetPasswordData(BaseModel):
-    target_user: str
-    new_password: str
-
 # ---------------- AUTH ----------------
 @app.post("/api/register")
 def register(data: RegisterData):
@@ -92,8 +90,8 @@ def register(data: RegisterData):
     cur = conn.cursor()
     try:
         cur.execute(
-            "INSERT INTO users (username, password, role, is_active) VALUES (?, ?, 'homeowner', 1)",
-            (data.username, hash_password(data.password))
+            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            (data.username, hash_password(data.password), "homeowner")
         )
         conn.commit()
     except sqlite3.IntegrityError:
@@ -107,7 +105,7 @@ def login(data: LoginData):
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
-        "SELECT password, role, is_active FROM users WHERE username=?",
+        "SELECT password, role, disabled FROM users WHERE username=?",
         (data.username,)
     )
     user = cur.fetchone()
@@ -116,12 +114,12 @@ def login(data: LoginData):
     if not user or not verify_password(data.password, user[0]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if user[2] == 0:
+    if user[2] == 1:
         raise HTTPException(status_code=403, detail="Account disabled")
 
     return {"username": data.username, "role": user[1]}
 
-# ---------------- RECEIPTS ----------------
+# ---------------- RECEIPT UPLOAD ----------------
 @app.post("/api/upload-receipt")
 async def upload_receipt(username: str, file: UploadFile = File(...)):
     if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".pdf")):
@@ -144,84 +142,70 @@ async def upload_receipt(username: str, file: UploadFile = File(...)):
     conn.commit()
     conn.close()
 
-    return {"message": "Uploaded"}
+    return {"message": "Receipt uploaded"}
 
-# ---------------- ADMIN: USERS ----------------
+# ---------------- USER STATUS ----------------
+@app.get("/api/payment-status/{username}")
+def payment_status(username: str):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT status, uploaded_at FROM payments WHERE username=? ORDER BY id DESC LIMIT 1",
+        (username,)
+    )
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return {"status": "NO PAYMENT"}
+
+    return {"status": row[0], "uploaded_at": row[1]}
+
+# ---------------- ADMIN ----------------
 @app.get("/api/admin/users")
 def admin_users(username: str):
     if not is_admin(username):
         raise HTTPException(status_code=403)
-
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT username, role, is_active FROM users ORDER BY username")
+    cur.execute("SELECT username, role, disabled FROM users")
     users = cur.fetchall()
     conn.close()
     return users
 
-@app.post("/api/admin/disable-user/{target}")
-def disable_user(target: str, username: str):
+@app.post("/api/admin/toggle-user")
+def toggle_user(username: str, target: str):
     if not is_admin(username):
         raise HTTPException(status_code=403)
-
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("UPDATE users SET is_active=0 WHERE username=?", (target,))
+    cur.execute("UPDATE users SET disabled = 1 - disabled WHERE username=?", (target,))
     conn.commit()
     conn.close()
-    return {"message": "User disabled"}
-
-@app.post("/api/admin/enable-user/{target}")
-def enable_user(target: str, username: str):
-    if not is_admin(username):
-        raise HTTPException(status_code=403)
-
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("UPDATE users SET is_active=1 WHERE username=?", (target,))
-    conn.commit()
-    conn.close()
-    return {"message": "User enabled"}
+    return {"message": "User updated"}
 
 @app.post("/api/admin/reset-password")
-def reset_password(data: ResetPasswordData, username: str):
+def reset_password(username: str, target: str):
     if not is_admin(username):
         raise HTTPException(status_code=403)
-
+    new_pass = "password123"
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
         "UPDATE users SET password=? WHERE username=?",
-        (hash_password(data.new_password), data.target_user)
+        (hash_password(new_pass), target)
     )
     conn.commit()
     conn.close()
-    return {"message": "Password reset"}
+    return {"message": f"Password reset to {new_pass}"}
 
-# ---------------- ADMIN: PAYMENTS ----------------
 @app.get("/api/admin/payments")
 def admin_payments(username: str):
     if not is_admin(username):
         raise HTTPException(status_code=403)
-
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM payments ORDER BY uploaded_at DESC")
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-@app.get("/api/admin/payments/{user}")
-def user_payment_history(user: str, username: str):
-    if not is_admin(username):
-        raise HTTPException(status_code=403)
-
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT * FROM payments WHERE username=? ORDER BY uploaded_at DESC",
-        (user,)
-    )
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -230,7 +214,6 @@ def user_payment_history(user: str, username: str):
 def approve_payment(payment_id: int, username: str):
     if not is_admin(username):
         raise HTTPException(status_code=403)
-
     conn = get_db()
     cur = conn.cursor()
     cur.execute("UPDATE payments SET status='APPROVED' WHERE id=?", (payment_id,))
@@ -238,44 +221,35 @@ def approve_payment(payment_id: int, username: str):
     conn.close()
     return {"message": "Approved"}
 
-# ---------------- ANALYTICS ----------------
+@app.get("/api/admin/user-payments")
+def user_payments(username: str, target: str):
+    if not is_admin(username):
+        raise HTTPException(status_code=403)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, filename, status, uploaded_at FROM payments WHERE username=?",
+        (target,)
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
 @app.get("/api/admin/analytics")
 def analytics(username: str):
     if not is_admin(username):
         raise HTTPException(status_code=403)
-
     conn = get_db()
     cur = conn.cursor()
-
     cur.execute("SELECT COUNT(*) FROM users")
-    total_users = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(*) FROM users WHERE is_active=1")
-    active_users = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(*) FROM users WHERE is_active=0")
-    disabled_users = cur.fetchone()[0]
-
+    users = cur.fetchone()[0]
     cur.execute("SELECT COUNT(*) FROM payments")
-    total_payments = cur.fetchone()[0]
-
+    payments = cur.fetchone()[0]
     cur.execute("SELECT COUNT(*) FROM payments WHERE status='PENDING'")
     pending = cur.fetchone()[0]
-
-    cur.execute("SELECT COUNT(*) FROM payments WHERE status='APPROVED'")
-    approved = cur.fetchone()[0]
-
     conn.close()
-
     return {
-        "users": {
-            "total": total_users,
-            "active": active_users,
-            "disabled": disabled_users
-        },
-        "payments": {
-            "total": total_payments,
-            "pending": pending,
-            "approved": approved
-        }
+        "users": users,
+        "payments": payments,
+        "pending": pending
     }
