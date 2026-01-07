@@ -18,7 +18,7 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 pwd_context = CryptContext(
-    schemes=["argon2"],  # ✅ FIXED
+    schemes=["argon2"],
     deprecated="auto"
 )
 
@@ -65,10 +65,18 @@ ensure_admin()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ---------------- ROOT ----------------
+# ---------------- PAGE ROUTES ----------------
 @app.get("/")
 def root():
     return FileResponse("static/login.html")
+
+@app.get("/login")
+def login_page():
+    return FileResponse("static/login.html")
+
+@app.get("/register")
+def register_page():
+    return FileResponse("static/register.html")
 
 # ---------------- MODELS ----------------
 class LoginData(BaseModel):
