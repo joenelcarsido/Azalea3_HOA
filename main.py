@@ -10,7 +10,7 @@ import uuid
 
 from database import init_db
 
-# ================= CONFIG =================
+# ---------------- CONFIG ----------------
 DB = "hoa.db"
 UPLOAD_DIR = "uploads"
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
@@ -22,7 +22,7 @@ pwd_context = CryptContext(
     deprecated="auto"
 )
 
-# ================= DB HELPERS =================
+# ---------------- DB HELPERS ----------------
 def get_db():
     return sqlite3.connect(DB, check_same_thread=False)
 
@@ -40,7 +40,7 @@ def is_admin(username: str):
     conn.close()
     return row and row[0] == "admin"
 
-# ================= ADMIN BOOTSTRAP =================
+# ---------------- ADMIN BOOTSTRAP ----------------
 def ensure_admin():
     conn = get_db()
     cur = conn.cursor()
@@ -55,7 +55,7 @@ def ensure_admin():
 
     conn.close()
 
-# ================= APP =================
+# ---------------- APP SETUP ----------------
 app = FastAPI()
 
 init_db()
@@ -64,7 +64,7 @@ ensure_admin()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# ================= PAGE ROUTES =================
+# ---------------- PAGE ROUTES ----------------
 @app.get("/")
 def root():
     return FileResponse("static/login.html")
@@ -77,15 +77,7 @@ def login_page():
 def register_page():
     return FileResponse("static/register.html")
 
-@app.get("/dashboard")
-def dashboard_page():
-    return FileResponse("static/dashboard.html")
-
-@app.get("/admin")
-def admin_page():
-    return FileResponse("static/admin.html")
-
-# ================= MODELS =================
+# ---------------- MODELS ----------------
 class LoginData(BaseModel):
     username: str
     password: str
@@ -95,14 +87,16 @@ class RegisterData(BaseModel):
     password: str
 
 class ChangePasswordData(BaseModel):
+    username: str
     old_password: str
     new_password: str
 
-# ================= AUTH =================
+# ---------------- AUTH ----------------
 @app.post("/api/register")
 def register(data: RegisterData):
     conn = get_db()
     cur = conn.cursor()
+
     try:
         cur.execute(
             "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
@@ -133,39 +127,41 @@ def login(data: LoginData):
 
     return {"username": data.username, "role": user[1]}
 
-# ================= CHANGE PASSWORD =================
 @app.post("/api/change-password")
-def change_password(username: str, data: ChangePasswordData):
+def change_password(data: ChangePasswordData):
     conn = get_db()
     cur = conn.cursor()
 
-    cur.execute("SELECT password FROM users WHERE username=?", (username,))
-    row = cur.fetchone()
+    cur.execute("SELECT password FROM users WHERE username=?", (data.username,))
+    user = cur.fetchone()
 
-    if not row or not verify_password(data.old_password, row[0]):
-        conn.close()
-        raise HTTPException(status_code=400, detail="Old password incorrect")
+    if not user or not verify_password(data.old_password, user[0]):
+        raise HTTPException(status_code=401, detail="Old password incorrect")
 
     cur.execute(
         "UPDATE users SET password=? WHERE username=?",
-        (hash_password(data.new_password), username)
+        (hash_password(data.new_password), data.username)
     )
 
     conn.commit()
     conn.close()
 
-    return {"message": "Password updated successfully"}
+    return {"message": "Password changed successfully"}
 
-# ================= RECEIPT UPLOAD =================
+# ---------------- RECEIPT UPLOAD ----------------
 @app.post("/api/upload-receipt")
-async def upload_receipt(username: str, file: UploadFile = File(...)):
-
+async def upload_receipt(
+    username: str,
+    month: str,
+    year: int,
+    file: UploadFile = File(...)
+):
     if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".pdf")):
         raise HTTPException(status_code=400, detail="Invalid file type")
 
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large")
+        raise HTTPException(status_code=400, detail="File too large (max 5MB)")
 
     filename = f"{uuid.uuid4()}_{file.filename}"
     filepath = os.path.join(UPLOAD_DIR, filename)
@@ -175,19 +171,53 @@ async def upload_receipt(username: str, file: UploadFile = File(...)):
 
     conn = get_db()
     cur = conn.cursor()
+
+    # Prevent duplicate payment for same month/year
+    cur.execute(
+        "SELECT 1 FROM payments WHERE username=? AND month=? AND year=?",
+        (username, month, year)
+    )
+    if cur.fetchone():
+        conn.close()
+        raise HTTPException(
+            status_code=400,
+            detail="Payment for this month already submitted"
+        )
+
     cur.execute(
         """
-        INSERT INTO payments (username, filename, status, uploaded_at)
-        VALUES (?, ?, 'PENDING', ?)
+        INSERT INTO payments
+        (username, filename, status, uploaded_at, month, year)
+        VALUES (?, ?, 'PENDING', ?, ?, ?)
         """,
-        (username, filename, datetime.now().isoformat())
+        (username, filename, datetime.now().isoformat(), month, year)
     )
+
     conn.commit()
     conn.close()
 
     return {"message": "Receipt uploaded. Awaiting admin approval."}
 
-# ================= USER STATUS =================
+# ---------------- USER PAYMENTS ----------------
+@app.get("/api/user/payments/{username}")
+def user_payments(username: str):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT id, filename, status, uploaded_at, month, year
+        FROM payments
+        WHERE username=?
+        ORDER BY year DESC, uploaded_at DESC
+        """,
+        (username,)
+    )
+
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
 @app.get("/api/payment-status/{username}")
 def payment_status(username: str):
     conn = get_db()
@@ -198,7 +228,7 @@ def payment_status(username: str):
         SELECT status, uploaded_at
         FROM payments
         WHERE username=?
-        ORDER BY id DESC
+        ORDER BY uploaded_at DESC
         LIMIT 1
         """,
         (username,)
@@ -212,37 +242,41 @@ def payment_status(username: str):
 
     return {"status": row[0], "uploaded_at": row[1]}
 
-# ================= ADMIN APIs =================
+# ---------------- ADMIN ----------------
 @app.get("/api/admin/users")
 def admin_users(username: str):
     if not is_admin(username):
-        raise HTTPException(status_code=403)
+        raise HTTPException(status_code=403, detail="Admin access only")
 
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT username, role FROM users ORDER BY username")
     users = cur.fetchall()
     conn.close()
-
     return users
 
 @app.get("/api/admin/payments")
 def admin_payments(username: str):
     if not is_admin(username):
-        raise HTTPException(status_code=403)
+        raise HTTPException(status_code=403, detail="Admin access only")
 
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM payments ORDER BY id DESC")
+    cur.execute(
+        """
+        SELECT id, username, filename, status, uploaded_at, month, year
+        FROM payments
+        ORDER BY uploaded_at DESC
+        """
+    )
     rows = cur.fetchall()
     conn.close()
-
     return rows
 
 @app.post("/api/admin/approve/{payment_id}")
 def approve_payment(payment_id: int, username: str):
     if not is_admin(username):
-        raise HTTPException(status_code=403)
+        raise HTTPException(status_code=403, detail="Admin access only")
 
     conn = get_db()
     cur = conn.cursor()
