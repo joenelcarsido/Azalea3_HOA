@@ -13,7 +13,7 @@ from database import init_db
 # ---------------- CONFIG ----------------
 DB = "hoa.db"
 UPLOAD_DIR = "uploads"
-MAX_FILE_SIZE = 5 * 1024 * 1024
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -97,21 +97,25 @@ def register(data: RegisterData):
         )
         conn.commit()
     except sqlite3.IntegrityError:
-        raise HTTPException(400, "Username already exists")
+        raise HTTPException(status_code=400, detail="Username already exists")
     finally:
         conn.close()
+
     return {"message": "Registration successful"}
 
 @app.post("/api/login")
 def login(data: LoginData):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT password, role FROM users WHERE username=?", (data.username,))
+    cur.execute(
+        "SELECT password, role FROM users WHERE username=?",
+        (data.username,)
+    )
     user = cur.fetchone()
     conn.close()
 
     if not user or not verify_password(data.password, user[0]):
-        raise HTTPException(401, "Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     return {"username": data.username, "role": user[1]}
 
@@ -123,36 +127,52 @@ async def upload_receipt(
     year: int = Form(...),
     file: UploadFile = File(...)
 ):
+    # Validate file type
     if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".pdf")):
-        raise HTTPException(400, "Invalid file type")
+        raise HTTPException(status_code=400, detail="Invalid file type")
 
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(400, "File too large")
+    contents = await file.read()
 
+    # Validate file size
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large")
+
+    # Save file
     filename = f"{uuid.uuid4()}_{file.filename}"
-    path = os.path.join(UPLOAD_DIR, filename)
+    file_path = os.path.join(UPLOAD_DIR, filename)
 
-    with open(path, "wb") as f:
-        f.write(content)
+    with open(file_path, "wb") as f:
+        f.write(contents)
 
     conn = get_db()
     cur = conn.cursor()
 
+    # Prevent duplicate payment
     cur.execute(
         "SELECT 1 FROM payments WHERE username=? AND month=? AND year=?",
         (username, month, year)
     )
     if cur.fetchone():
         conn.close()
-        raise HTTPException(400, "Payment for this period already exists")
+        raise HTTPException(
+            status_code=400,
+            detail="Payment for this month already exists"
+        )
 
+    # Insert payment
     cur.execute(
         """
-        INSERT INTO payments (username, filename, status, uploaded_at, month, year)
+        INSERT INTO payments
+        (username, filename, status, uploaded_at, month, year)
         VALUES (?, ?, 'PENDING', ?, ?, ?)
         """,
-        (username, filename, datetime.now().isoformat(), month, year)
+        (
+            username,
+            filename,
+            datetime.now().isoformat(),
+            month,
+            year
+        )
     )
 
     conn.commit()
@@ -181,7 +201,7 @@ def user_payments(username: str):
 @app.get("/api/admin/users")
 def admin_users(username: str):
     if not is_admin(username):
-        raise HTTPException(403)
+        raise HTTPException(status_code=403)
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT username, role FROM users ORDER BY username")
@@ -192,7 +212,7 @@ def admin_users(username: str):
 @app.get("/api/admin/payments")
 def admin_payments(username: str):
     if not is_admin(username):
-        raise HTTPException(403)
+        raise HTTPException(status_code=403)
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
@@ -209,10 +229,13 @@ def admin_payments(username: str):
 @app.post("/api/admin/approve/{payment_id}")
 def approve_payment(payment_id: int, username: str):
     if not is_admin(username):
-        raise HTTPException(403)
+        raise HTTPException(status_code=403)
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("UPDATE payments SET status='APPROVED' WHERE id=?", (payment_id,))
+    cur.execute(
+        "UPDATE payments SET status='APPROVED' WHERE id=?",
+        (payment_id,)
+    )
     conn.commit()
     conn.close()
     return {"message": "Payment approved"}
