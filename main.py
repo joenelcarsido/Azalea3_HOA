@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -17,10 +17,7 @@ MAX_FILE_SIZE = 5 * 1024 * 1024
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-pwd_context = CryptContext(
-    schemes=["argon2"],
-    deprecated="auto"
-)
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 # ---------------- DB ----------------
 def get_db():
@@ -44,7 +41,6 @@ def is_admin(username: str):
 def ensure_admin():
     conn = get_db()
     cur = conn.cursor()
-
     cur.execute("SELECT 1 FROM users WHERE username='admin'")
     if not cur.fetchone():
         cur.execute(
@@ -52,7 +48,6 @@ def ensure_admin():
             ("admin", hash_password("admin123"), "admin")
         )
         conn.commit()
-
     conn.close()
 
 # ---------------- APP ----------------
@@ -77,6 +72,10 @@ def login_page():
 def register_page():
     return FileResponse("static/register.html")
 
+@app.get("/dashboard")
+def dashboard_page():
+    return FileResponse("static/dashboard.html")
+
 # ---------------- MODELS ----------------
 class LoginData(BaseModel):
     username: str
@@ -91,7 +90,6 @@ class RegisterData(BaseModel):
 def register(data: RegisterData):
     conn = get_db()
     cur = conn.cursor()
-
     try:
         cur.execute(
             "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
@@ -102,18 +100,13 @@ def register(data: RegisterData):
         raise HTTPException(400, "Username already exists")
     finally:
         conn.close()
-
     return {"message": "Registration successful"}
 
 @app.post("/api/login")
 def login(data: LoginData):
     conn = get_db()
     cur = conn.cursor()
-
-    cur.execute(
-        "SELECT password, role FROM users WHERE username=?",
-        (data.username,)
-    )
+    cur.execute("SELECT password, role FROM users WHERE username=?", (data.username,))
     user = cur.fetchone()
     conn.close()
 
@@ -125,9 +118,9 @@ def login(data: LoginData):
 # ---------------- USER PAYMENTS ----------------
 @app.post("/api/upload-receipt")
 async def upload_receipt(
-    username: str,
-    month: str,
-    year: int,
+    username: str = Form(...),
+    month: str = Form(...),
+    year: int = Form(...),
     file: UploadFile = File(...)
 ):
     if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".pdf")):
@@ -146,12 +139,8 @@ async def upload_receipt(
     conn = get_db()
     cur = conn.cursor()
 
-    # Prevent duplicate payment for same month/year
     cur.execute(
-        """
-        SELECT 1 FROM payments
-        WHERE username=? AND month=? AND year=?
-        """,
+        "SELECT 1 FROM payments WHERE username=? AND month=? AND year=?",
         (username, month, year)
     )
     if cur.fetchone():
@@ -160,8 +149,7 @@ async def upload_receipt(
 
     cur.execute(
         """
-        INSERT INTO payments
-        (username, filename, status, uploaded_at, month, year)
+        INSERT INTO payments (username, filename, status, uploaded_at, month, year)
         VALUES (?, ?, 'PENDING', ?, ?, ?)
         """,
         (username, filename, datetime.now().isoformat(), month, year)
@@ -176,7 +164,6 @@ async def upload_receipt(
 def user_payments(username: str):
     conn = get_db()
     cur = conn.cursor()
-
     cur.execute(
         """
         SELECT id, filename, status, uploaded_at, month, year
@@ -186,7 +173,6 @@ def user_payments(username: str):
         """,
         (username,)
     )
-
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -196,7 +182,6 @@ def user_payments(username: str):
 def admin_users(username: str):
     if not is_admin(username):
         raise HTTPException(403)
-
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT username, role FROM users ORDER BY username")
@@ -208,7 +193,6 @@ def admin_users(username: str):
 def admin_payments(username: str):
     if not is_admin(username):
         raise HTTPException(403)
-
     conn = get_db()
     cur = conn.cursor()
     cur.execute(
@@ -226,14 +210,9 @@ def admin_payments(username: str):
 def approve_payment(payment_id: int, username: str):
     if not is_admin(username):
         raise HTTPException(403)
-
     conn = get_db()
     cur = conn.cursor()
-    cur.execute(
-        "UPDATE payments SET status='APPROVED' WHERE id=?",
-        (payment_id,)
-    )
+    cur.execute("UPDATE payments SET status='APPROVED' WHERE id=?", (payment_id,))
     conn.commit()
     conn.close()
-
     return {"message": "Payment approved"}
