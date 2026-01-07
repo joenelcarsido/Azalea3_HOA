@@ -1,7 +1,94 @@
-localStorage.setItem("username", data.username);
+<!DOCTYPE html>
 
-if (data.role === "admin") {
-  window.location.href = "/static/admin.html";
-} else {
-  window.location.href = "/static/dashboard.html";
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HOA Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background: #f4f6f9;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-card {
+      width: 100%;
+      max-width: 400px;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+
+<div class="login-card">
+  <h3 class="text-center mb-4">HOA Portal Login</h3>
+
+  <div class="mb-3">
+    <label class="form-label">Username</label>
+    <input type="text" id="username" class="form-control" placeholder="Enter username" />
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Password</label>
+    <input type="password" id="password" class="form-control" placeholder="Enter password" />
+  </div>
+
+  <div id="error" class="text-danger mb-3" style="display:none"></div>
+
+<button class="btn btn-primary w-100" onclick="login()">Login</button>
+
+</div>
+
+<script>
+async function login() {
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value.trim();
+  const errorDiv = document.getElementById("error");
+
+  errorDiv.style.display = "none";
+
+  if (!username || !password) {
+    errorDiv.innerText = "Username and password are required";
+    errorDiv.style.display = "block";
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.detail || "Login failed");
+    }
+
+    // Save session info
+    localStorage.setItem("username", data.username);
+    localStorage.setItem("role", data.role);
+
+    // Redirect by role
+    if (data.role === "admin") {
+      window.location.href = "/static/admin.html";
+    } else {
+      window.location.href = "/static/dashboard.html";
+    }
+
+  } catch (err) {
+    errorDiv.innerText = err.message;
+    errorDiv.style.display = "block";
+  }
 }
+</script>
+
+</body>
+</html>
