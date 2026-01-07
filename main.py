@@ -1,4 +1,8 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+# =======================
+# main.py
+# =======================
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -8,8 +12,7 @@ import sqlite3
 import os
 import uuid
 
-from database import init_db
-
+# ---------------- CONFIG ----------------
 DB = "hoa.db"
 UPLOAD_DIR = "uploads"
 MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -18,6 +21,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
+# ---------------- DB ----------------
 def get_db():
     return sqlite3.connect(DB, check_same_thread=False)
 
@@ -35,18 +39,47 @@ def is_admin(username: str):
     conn.close()
     return row and row[0] == "admin"
 
+# ---------------- INIT ----------------
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL
+    )
+    """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        filename TEXT,
+        status TEXT,
+        uploaded_at TEXT,
+        month TEXT,
+        year TEXT
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
 def ensure_admin():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT 1 FROM users WHERE username='admin'")
     if not cur.fetchone():
         cur.execute(
-            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            "INSERT INTO users VALUES (?, ?, ?)",
             ("admin", hash_password("admin123"), "admin")
         )
         conn.commit()
     conn.close()
 
+# ---------------- APP ----------------
 app = FastAPI()
 
 init_db()
@@ -55,6 +88,7 @@ ensure_admin()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+# ---------------- PAGES ----------------
 @app.get("/")
 def root():
     return FileResponse("static/login.html")
@@ -67,10 +101,7 @@ def login_page():
 def register_page():
     return FileResponse("static/register.html")
 
-@app.get("/dashboard")
-def dashboard_page():
-    return FileResponse("static/dashboard.html")
-
+# ---------------- MODELS ----------------
 class LoginData(BaseModel):
     username: str
     password: str
@@ -79,21 +110,22 @@ class RegisterData(BaseModel):
     username: str
     password: str
 
+# ---------------- AUTH ----------------
 @app.post("/api/register")
 def register(data: RegisterData):
     conn = get_db()
     cur = conn.cursor()
     try:
         cur.execute(
-            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            "INSERT INTO users VALUES (?, ?, ?)",
             (data.username, hash_password(data.password), "homeowner")
         )
         conn.commit()
     except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="Username already exists")
+        raise HTTPException(400, "Username exists")
     finally:
         conn.close()
-    return {"message": "Registration successful"}
+    return {"message": "Registered"}
 
 @app.post("/api/login")
 def login(data: LoginData):
@@ -103,41 +135,45 @@ def login(data: LoginData):
         "SELECT password, role FROM users WHERE username=?",
         (data.username,)
     )
-    user = cur.fetchone()
+    row = cur.fetchone()
     conn.close()
-    if not user or not verify_password(data.password, user[0]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"username": data.username, "role": user[1]}
 
+    if not row or not verify_password(data.password, row[0]):
+        raise HTTPException(401, "Invalid credentials")
+
+    return {"username": data.username, "role": row[1]}
+
+# ---------------- UPLOAD RECEIPT (FIXED) ----------------
 @app.post("/api/upload-receipt")
 async def upload_receipt(
-    username: str = Form(...),
-    month: str = Form(...),
-    year: str = Form(...),
+    username: str = Query(...),
+    month: str = Query(...),
+    year: str = Query(...),
     file: UploadFile = File(...)
 ):
     if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".pdf")):
-        raise HTTPException(status_code=400, detail="Invalid file type")
+        raise HTTPException(400, "Invalid file type")
 
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large")
+        raise HTTPException(400, "File too large")
 
     filename = f"{uuid.uuid4()}_{file.filename}"
-    path = os.path.join(UPLOAD_DIR, filename)
+    filepath = os.path.join(UPLOAD_DIR, filename)
 
-    with open(path, "wb") as f:
+    with open(filepath, "wb") as f:
         f.write(contents)
 
     conn = get_db()
     cur = conn.cursor()
+
     cur.execute(
         "SELECT 1 FROM payments WHERE username=? AND month=? AND year=?",
         (username, month, year)
     )
     if cur.fetchone():
         conn.close()
-        raise HTTPException(status_code=400, detail="Payment already exists")
+        raise HTTPException(400, "Payment already exists")
 
     cur.execute(
         """
@@ -145,13 +181,15 @@ async def upload_receipt(
         (username, filename, status, uploaded_at, month, year)
         VALUES (?, ?, 'PENDING', ?, ?, ?)
         """,
-        (username, filename, datetime.now().isoformat(), month, year)
+        (username, filename, datetime.utcnow().isoformat(), month, year)
     )
 
     conn.commit()
     conn.close()
-    return {"message": "Payment submitted for approval"}
 
+    return {"message": "Receipt uploaded successfully"}
+
+# ---------------- USER PAYMENTS ----------------
 @app.get("/api/user/payments/{username}")
 def user_payments(username: str):
     conn = get_db()
@@ -161,52 +199,10 @@ def user_payments(username: str):
         SELECT id, filename, status, uploaded_at, month, year
         FROM payments
         WHERE username=?
-        ORDER BY year DESC, uploaded_at DESC
+        ORDER BY uploaded_at DESC
         """,
         (username,)
     )
     rows = cur.fetchall()
     conn.close()
     return rows
-
-@app.get("/api/admin/users")
-def admin_users(username: str):
-    if not is_admin(username):
-        raise HTTPException(status_code=403)
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT username, role FROM users ORDER BY username")
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-@app.get("/api/admin/payments")
-def admin_payments(username: str):
-    if not is_admin(username):
-        raise HTTPException(status_code=403)
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, username, filename, status, uploaded_at, month, year
-        FROM payments
-        ORDER BY uploaded_at DESC
-        """
-    )
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-@app.post("/api/admin/approve/{payment_id}")
-def approve_payment(payment_id: int, username: str):
-    if not is_admin(username):
-        raise HTTPException(status_code=403)
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE payments SET status='APPROVED' WHERE id=?",
-        (payment_id,)
-    )
-    conn.commit()
-    conn.close()
-    return {"message": "Payment approved"}
