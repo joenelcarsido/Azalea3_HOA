@@ -1,3 +1,7 @@
+from database import init_db
+
+init_db()
+
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
