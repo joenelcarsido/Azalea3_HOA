@@ -2,66 +2,97 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>User Dashboard</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
 
-<body class="bg-light">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body { background: #f4f6f9; }
+    .card { border-radius: 12px; }
+  </style>
+</head>
+<body>
 
 <nav class="navbar navbar-light bg-white shadow-sm mb-4">
   <div class="container">
-    <span class="navbar-brand">🏠 HOA Dashboard</span>
+    <span class="navbar-brand">🏠 Homeowner Dashboard</span>
     <button class="btn btn-outline-danger btn-sm" onclick="logout()">Logout</button>
   </div>
 </nav>
 
 <div class="container">
 
+  <!-- WELCOME -->
   <div class="card p-3 mb-4">
     <h5>Welcome, <span id="username"></span></h5>
     <small class="text-muted">Role: Homeowner</small>
   </div>
 
+  <!-- UPLOAD RECEIPT -->
   <div class="card p-3 mb-4">
     <h5>Submit HOA Payment Receipt</h5>
 
     <div class="row g-2 mb-3">
       <div class="col-md-6">
-        <label>Month</label>
+        <label class="form-label">Month</label>
         <select id="month" class="form-select">
-          <option value="">Select</option>
-          <option>January</option><option>February</option><option>March</option>
-          <option>April</option><option>May</option><option>June</option>
-          <option>July</option><option>August</option><option>September</option>
-          <option>October</option><option>November</option><option>December</option>
+          <option value="">Select month</option>
+          <option>January</option>
+          <option>February</option>
+          <option>March</option>
+          <option>April</option>
+          <option>May</option>
+          <option>June</option>
+          <option>July</option>
+          <option>August</option>
+          <option>September</option>
+          <option>October</option>
+          <option>November</option>
+          <option>December</option>
         </select>
       </div>
+
       <div class="col-md-6">
-        <label>Year</label>
+        <label class="form-label">Year</label>
         <select id="year" class="form-select"></select>
       </div>
     </div>
 
-    <input type="file" id="receipt" class="form-control mb-3">
-    <button class="btn btn-primary" onclick="uploadReceipt()">Upload Receipt</button>
+    <input type="file" id="receipt" class="form-control mb-3" />
+    <button class="btn btn-primary w-100" onclick="uploadReceipt()">Upload Receipt</button>
+
     <div id="uploadMsg" class="mt-3"></div>
   </div>
 
-  <div class="card p-3">
+  <!-- PAYMENT HISTORY -->
+  <div class="card p-3 mb-4">
     <h5>Payment History</h5>
-    <table class="table table-striped">
-      <thead>
-        <tr>
-          <th>#</th><th>Month</th><th>Year</th><th>Status</th><th>Receipt</th>
-        </tr>
-      </thead>
-      <tbody id="historyTable"></tbody>
-    </table>
+
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Month</th>
+            <th>Year</th>
+            <th>Status</th>
+            <th>Receipt</th>
+          </tr>
+        </thead>
+        <tbody id="historyTable">
+          <tr>
+            <td colspan="5" class="text-center">Loading...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
 </div>
 
 <script>
+/* ---------- AUTH ---------- */
 const username = localStorage.getItem("username");
 const role = localStorage.getItem("role");
 
@@ -71,49 +102,56 @@ if (!username || role !== "homeowner") {
 
 document.getElementById("username").innerText = username;
 
+/* ---------- YEAR OPTIONS ---------- */
 const yearSelect = document.getElementById("year");
 const currentYear = new Date().getFullYear();
+
 for (let y = currentYear - 2; y <= currentYear + 1; y++) {
-  yearSelect.innerHTML += `<option>${y}</option>`;
+  yearSelect.innerHTML += `<option value="${y}">${y}</option>`;
 }
 
+/* ---------- UPLOAD ---------- */
 async function uploadReceipt() {
   const file = document.getElementById("receipt").files[0];
   const month = document.getElementById("month").value;
   const year = document.getElementById("year").value;
   const msg = document.getElementById("uploadMsg");
 
+  msg.innerHTML = "";
+
   if (!file || !month || !year) {
-    msg.innerHTML = "<span class='text-danger'>All fields required</span>";
+    msg.innerHTML = `<span class="text-danger">All fields are required</span>`;
     return;
   }
 
   const formData = new FormData();
-  formData.append("username", username);
-  formData.append("month", month);
-  formData.append("year", year);
   formData.append("file", file);
 
-  const res = await fetch("/api/upload-receipt", {
-    method: "POST",
-    body: formData
-  });
+  const res = await fetch(
+    `/api/upload-receipt?username=${username}&month=${month}&year=${year}`,
+    { method: "POST", body: formData }
+  );
 
   const data = await res.json();
-  msg.innerHTML = res.ok
-    ? `<span class="text-success">${data.message}</span>`
-    : `<span class="text-danger">${data.detail}</span>`;
 
+  if (!res.ok) {
+    msg.innerHTML = `<span class="text-danger">${data.detail || "Upload failed"}</span>`;
+    return;
+  }
+
+  msg.innerHTML = `<span class="text-success">${data.message}</span>`;
   loadHistory();
 }
 
+/* ---------- HISTORY ---------- */
 async function loadHistory() {
   const res = await fetch(`/api/user/payments/${username}`);
   const data = await res.json();
 
   const tbody = document.getElementById("historyTable");
+
   if (!data.length) {
-    tbody.innerHTML = `<tr><td colspan="5">No payments yet</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center">No payments yet</td></tr>`;
     return;
   }
 
@@ -122,7 +160,11 @@ async function loadHistory() {
       <td>${i + 1}</td>
       <td>${p[4]}</td>
       <td>${p[5]}</td>
-      <td><span class="badge ${p[2] === "APPROVED" ? "bg-success" : "bg-warning text-dark"}">${p[2]}</span></td>
+      <td>
+        <span class="badge ${p[2] === "APPROVED" ? "bg-success" : "bg-warning text-dark"}">
+          ${p[2]}
+        </span>
+      </td>
       <td><a href="/uploads/${p[1]}" target="_blank">View</a></td>
     </tr>
   `).join("");
@@ -130,6 +172,7 @@ async function loadHistory() {
 
 loadHistory();
 
+/* ---------- LOGOUT ---------- */
 function logout() {
   localStorage.clear();
   window.location.href = "/login";
