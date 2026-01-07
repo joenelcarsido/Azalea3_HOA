@@ -17,11 +17,14 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["argon2"],  # ✅ FIXED
+    deprecated="auto"
+)
 
 # ---------------- DB HELPERS ----------------
 def get_db():
-    return sqlite3.connect(DB)
+    return sqlite3.connect(DB, check_same_thread=False)
 
 def hash_password(password: str):
     return pwd_context.hash(password)
@@ -35,23 +38,23 @@ def is_admin(username: str):
     cur.execute("SELECT role FROM users WHERE username=?", (username,))
     row = cur.fetchone()
     conn.close()
-    return row and row[0] == "admin"
+    return row is not None and row[0] == "admin"
 
 # ---------------- ADMIN BOOTSTRAP ----------------
 def ensure_admin():
     conn = get_db()
     cur = conn.cursor()
 
-    # Remove old admin if exists
-    cur.execute("DELETE FROM users WHERE username='admin'")
+    cur.execute("SELECT 1 FROM users WHERE username='admin'")
+    exists = cur.fetchone()
 
-    # Create fresh admin
-    cur.execute(
-        "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-        ("admin", hash_password("admin123"), "admin")
-    )
+    if not exists:
+        cur.execute(
+            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            ("admin", hash_password("admin123"), "admin")
+        )
+        conn.commit()
 
-    conn.commit()
     conn.close()
 
 # ---------------- APP SETUP ----------------
