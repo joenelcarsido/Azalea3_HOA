@@ -10,16 +10,14 @@ import uuid
 
 from database import init_db
 
-# ---------------- CONFIG ----------------
 DB = "hoa.db"
 UPLOAD_DIR = "uploads"
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_FILE_SIZE = 5 * 1024 * 1024
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
-# ---------------- DB ----------------
 def get_db():
     return sqlite3.connect(DB, check_same_thread=False)
 
@@ -37,7 +35,6 @@ def is_admin(username: str):
     conn.close()
     return row and row[0] == "admin"
 
-# ---------------- ADMIN INIT ----------------
 def ensure_admin():
     conn = get_db()
     cur = conn.cursor()
@@ -50,7 +47,6 @@ def ensure_admin():
         conn.commit()
     conn.close()
 
-# ---------------- APP ----------------
 app = FastAPI()
 
 init_db()
@@ -59,7 +55,6 @@ ensure_admin()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# ---------------- PAGES ----------------
 @app.get("/")
 def root():
     return FileResponse("static/login.html")
@@ -76,7 +71,6 @@ def register_page():
 def dashboard_page():
     return FileResponse("static/dashboard.html")
 
-# ---------------- MODELS ----------------
 class LoginData(BaseModel):
     username: str
     password: str
@@ -85,7 +79,6 @@ class RegisterData(BaseModel):
     username: str
     password: str
 
-# ---------------- AUTH ----------------
 @app.post("/api/register")
 def register(data: RegisterData):
     conn = get_db()
@@ -100,7 +93,6 @@ def register(data: RegisterData):
         raise HTTPException(status_code=400, detail="Username already exists")
     finally:
         conn.close()
-
     return {"message": "Registration successful"}
 
 @app.post("/api/login")
@@ -113,71 +105,51 @@ def login(data: LoginData):
     )
     user = cur.fetchone()
     conn.close()
-
     if not user or not verify_password(data.password, user[0]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
     return {"username": data.username, "role": user[1]}
 
-# ---------------- USER PAYMENTS ----------------
 @app.post("/api/upload-receipt")
 async def upload_receipt(
     username: str = Form(...),
     month: str = Form(...),
-    year: int = Form(...),
+    year: str = Form(...),
     file: UploadFile = File(...)
 ):
-    # Validate file type
     if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".pdf")):
         raise HTTPException(status_code=400, detail="Invalid file type")
 
     contents = await file.read()
-
-    # Validate file size
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File too large")
 
-    # Save file
     filename = f"{uuid.uuid4()}_{file.filename}"
-    file_path = os.path.join(UPLOAD_DIR, filename)
+    path = os.path.join(UPLOAD_DIR, filename)
 
-    with open(file_path, "wb") as f:
+    with open(path, "wb") as f:
         f.write(contents)
 
     conn = get_db()
     cur = conn.cursor()
-
-    # Prevent duplicate payment
     cur.execute(
         "SELECT 1 FROM payments WHERE username=? AND month=? AND year=?",
         (username, month, year)
     )
     if cur.fetchone():
         conn.close()
-        raise HTTPException(
-            status_code=400,
-            detail="Payment for this month already exists"
-        )
+        raise HTTPException(status_code=400, detail="Payment already exists")
 
-    # Insert payment
     cur.execute(
         """
         INSERT INTO payments
         (username, filename, status, uploaded_at, month, year)
         VALUES (?, ?, 'PENDING', ?, ?, ?)
         """,
-        (
-            username,
-            filename,
-            datetime.now().isoformat(),
-            month,
-            year
-        )
+        (username, filename, datetime.now().isoformat(), month, year)
     )
 
     conn.commit()
     conn.close()
-
     return {"message": "Payment submitted for approval"}
 
 @app.get("/api/user/payments/{username}")
@@ -197,7 +169,6 @@ def user_payments(username: str):
     conn.close()
     return rows
 
-# ---------------- ADMIN ----------------
 @app.get("/api/admin/users")
 def admin_users(username: str):
     if not is_admin(username):
