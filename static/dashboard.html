@@ -1,43 +1,102 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>User Dashboard</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
 
-<nav class="navbar navbar-dark bg-primary px-3">
-  <span class="navbar-brand">HOA User Dashboard</span>
-  <button class="btn btn-danger btn-sm" onclick="logout()">Logout</button>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body {
+      background: #f4f6f9;
+    }
+    .card {
+      border-radius: 12px;
+    }
+    .status-approved { color: green; font-weight: bold; }
+    .status-pending { color: orange; font-weight: bold; }
+    .status-none { color: red; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-light bg-white shadow-sm mb-4">
+  <div class="container">
+    <span class="navbar-brand">🏠 HOA User Dashboard</span>
+    <button class="btn btn-outline-danger btn-sm" onclick="logout()">Logout</button>
+  </div>
 </nav>
 
-<div class="container mt-4">
-  <h4>Upload Payment Receipt</h4>
+<div class="container">
 
-  <input type="file" id="file" class="form-control mt-2">
-  <button class="btn btn-success mt-2" onclick="upload()">Upload</button>
+  <!-- Welcome -->
+  <div class="card p-3 mb-4">
+    <h5>Welcome, <span id="username"></span></h5>
+    <small class="text-muted">Role: Homeowner</small>
+  </div>
 
-  <hr>
+  <!-- Payment Status -->
+  <div class="card p-3 mb-4">
+    <h5>HOA Payment Status</h5>
+    <p>Status: <span id="paymentStatus">Loading...</span></p>
+    <p id="uploadedAt" class="text-muted"></p>
+  </div>
 
-  <h5>Latest Payment Status</h5>
-  <div id="status" class="mt-2 text-muted"></div>
+  <!-- Upload Receipt -->
+  <div class="card p-3 mb-4">
+    <h5>Upload Payment Receipt</h5>
+    <input type="file" id="receipt" class="form-control mb-3" />
+    <button class="btn btn-primary" onclick="uploadReceipt()">Upload</button>
+    <div id="uploadMsg" class="mt-3"></div>
+  </div>
+
 </div>
 
 <script>
+/* ---------- AUTH GUARD ---------- */
 const username = localStorage.getItem("username");
 const role = localStorage.getItem("role");
 
-// 🔒 SECURITY CHECK
 if (!username || role !== "homeowner") {
-  alert("Unauthorized");
   window.location.href = "/login";
 }
 
-async function upload() {
-  const fileInput = document.getElementById("file");
+document.getElementById("username").innerText = username;
+
+/* ---------- LOAD PAYMENT STATUS ---------- */
+async function loadStatus() {
+  const res = await fetch(`/api/payment-status/${username}`);
+  const data = await res.json();
+
+  const statusEl = document.getElementById("paymentStatus");
+  const uploadedEl = document.getElementById("uploadedAt");
+
+  if (data.status === "APPROVED") {
+    statusEl.innerText = "APPROVED ✅";
+    statusEl.className = "status-approved";
+  } else if (data.status === "PENDING") {
+    statusEl.innerText = "PENDING ⏳";
+    statusEl.className = "status-pending";
+  } else {
+    statusEl.innerText = "NO PAYMENT ❌";
+    statusEl.className = "status-none";
+  }
+
+  uploadedEl.innerText = data.uploaded_at
+    ? `Last upload: ${data.uploaded_at}`
+    : "";
+}
+
+loadStatus();
+
+/* ---------- UPLOAD RECEIPT ---------- */
+async function uploadReceipt() {
+  const fileInput = document.getElementById("receipt");
+  const msg = document.getElementById("uploadMsg");
+
   if (!fileInput.files.length) {
-    alert("Please select a file");
+    msg.innerHTML = "<span class='text-danger'>Please select a file.</span>";
     return;
   }
 
@@ -50,26 +109,21 @@ async function upload() {
   });
 
   const data = await res.json();
-  alert(data.message);
+
+  if (!res.ok) {
+    msg.innerHTML = `<span class="text-danger">${data.detail}</span>`;
+    return;
+  }
+
+  msg.innerHTML = `<span class="text-success">${data.message}</span>`;
   loadStatus();
 }
 
-async function loadStatus() {
-  const res = await fetch(`/api/payment-status/${username}`);
-  const data = await res.json();
-
-  document.getElementById("status").innerText =
-    data.status === "NO PAYMENT"
-      ? "No payment uploaded"
-      : `Status: ${data.status} (Uploaded: ${data.uploaded_at})`;
-}
-
+/* ---------- LOGOUT ---------- */
 function logout() {
   localStorage.clear();
   window.location.href = "/login";
 }
-
-loadStatus();
 </script>
 
 </body>
