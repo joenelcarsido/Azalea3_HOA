@@ -1,100 +1,123 @@
 <!DOCTYPE html>
-<html>
+
+<html lang="en">
 <head>
-    <title>HOA Admin Dashboard</title>
-    <style>
-        body {
-            font-family: Arial;
-            background: #f4f4f4;
-            padding: 20px;
-        }
-        table {
-            width: 100%;
-            background: white;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid #ddd;
-        }
-        th {
-            background: #333;
-            color: white;
-        }
-        img {
-            max-width: 120px;
-        }
-        button {
-            padding: 6px 10px;
-            cursor: pointer;
-        }
-        .approved {
-            color: green;
-            font-weight: bold;
-        }
-        .pending {
-            color: orange;
-            font-weight: bold;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HOA Admin Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f4f6f9; }
+    .navbar { background-color: #1f3c88; }
+    .navbar-brand, .nav-link, .navbar-text { color: #fff !important; }
+    .card { border-radius: 12px; }
+  </style>
 </head>
 <body>
 
-<h2>HOA Admin Dashboard</h2>
+<nav class="navbar navbar-expand-lg px-4">
+  <span class="navbar-brand">HOA Admin Panel</span>
+  <div class="ms-auto">
+    <button class="btn btn-danger btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
 
-<table>
-    <thead>
-        <tr>
-            <th>User ID</th>
-            <th>Month</th>
-            <th>Amount</th>
-            <th>Receipt</th>
+<div class="container mt-4">
+  <div class="row g-3">
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm">
+        <h6>Total Users</h6>
+        <h3 id="totalUsers">–</h3>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm">
+        <h6>Pending Payments</h6>
+        <h3 id="pendingPayments">–</h3>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm">
+        <h6>Approved Payments</h6>
+        <h3 id="approvedPayments">–</h3>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 shadow-sm">
+        <h6>System Status</h6>
+        <h5 class="text-success">Online</h5>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-4 shadow-sm">
+    <div class="card-header"><strong>Payment Approvals</strong></div>
+    <div class="card-body">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>User</th>
+            <th>File</th>
             <th>Status</th>
             <th>Action</th>
-        </tr>
-    </thead>
-    <tbody id="payments"></tbody>
-</table>
+          </tr>
+        </thead>
+        <tbody id="paymentsTable"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
 <script>
-async function loadPayments() {
-    const res = await fetch("/api/admin/payments");
+  const username = localStorage.getItem("username");
+
+  if (!username) {
+    window.location.href = "/";
+  }
+
+  function logout() {
+    localStorage.clear();
+    window.location.href = "/";
+  }
+
+  async function loadPayments() {
+    const res = await fetch(`/api/admin/payments?username=${username}`);
+    if (!res.ok) return;
     const data = await res.json();
 
-    const table = document.getElementById("payments");
+    let pending = 0, approved = 0;
+    const table = document.getElementById("paymentsTable");
     table.innerHTML = "";
 
     data.forEach(p => {
-        table.innerHTML += `
-        <tr>
-            <td>${p.user_id}</td>
-            <td>${p.month}</td>
-            <td>₱${p.amount}</td>
-            <td>
-                <a href="/${p.receipt_path}" target="_blank">
-                    <img src="/${p.receipt_path}">
-                </a>
-            </td>
-            <td class="${p.status}">
-                ${p.status}
-            </td>
-            <td>
-                ${p.status === "pending"
-                ? `<button onclick="approve(${p.id})">Approve</button>`
-                : "—"}
-            </td>
-        </tr>`;
+      if (p[3] === "PENDING") pending++;
+      if (p[3] === "APPROVED") approved++;
+
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${p[0]}</td>
+        <td>${p[1]}</td>
+        <td>${p[2]}</td>
+        <td>${p[3]}</td>
+        <td>
+          ${p[3] === "PENDING" ? `<button class='btn btn-success btn-sm' onclick='approve(${p[0]})'>Approve</button>` : "–"}
+        </td>
+      `;
+      table.appendChild(row);
     });
-}
 
-async function approve(id) {
-    await fetch(`/api/admin/approve/${id}`, { method: "POST" });
+    document.getElementById("pendingPayments").innerText = pending;
+    document.getElementById("approvedPayments").innerText = approved;
+  }
+
+  async function approve(id) {
+    await fetch(`/api/admin/approve/${id}?username=${username}`, { method: "POST" });
     loadPayments();
-}
+  }
 
-loadPayments();
+  loadPayments();
 </script>
 
 </body>
 </html>
-
