@@ -206,3 +206,63 @@ def user_payments(username: str):
     rows = cur.fetchall()
     conn.close()
     return rows
+# ---------------- ADMIN USERS ----------------
+@app.get("/api/admin/users")
+def admin_users(username: str = Query(...)):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT role FROM users WHERE username=?", (username,))
+    row = cur.fetchone()
+    if not row or row[0] != "admin":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    cur.execute("SELECT username, role FROM users ORDER BY username")
+    users = cur.fetchall()
+    conn.close()
+    return users
+
+
+# ---------------- ADMIN PAYMENTS ----------------
+@app.get("/api/admin/payments")
+def admin_payments(username: str = Query(...)):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT role FROM users WHERE username=?", (username,))
+    row = cur.fetchone()
+    if not row or row[0] != "admin":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    cur.execute("""
+        SELECT id, username, filename, status, uploaded_at, month, year
+        FROM payments
+        ORDER BY uploaded_at DESC
+    """)
+    payments = cur.fetchall()
+    conn.close()
+    return payments
+
+
+# ---------------- APPROVE PAYMENT ----------------
+@app.post("/api/admin/approve/{payment_id}")
+def approve_payment(payment_id: int, username: str = Query(...)):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT role FROM users WHERE username=?", (username,))
+    row = cur.fetchone()
+    if not row or row[0] != "admin":
+        conn.close()
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    cur.execute(
+        "UPDATE payments SET status='APPROVED' WHERE id=?",
+        (payment_id,)
+    )
+    conn.commit()
+    conn.close()
+
+    return {"message": "Payment approved"}
