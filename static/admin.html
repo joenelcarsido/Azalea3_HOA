@@ -35,4 +35,52 @@ const username = localStorage.getItem("username");
 const role = localStorage.getItem("role");
 
 // 🔒 SECURITY CHECK
-if (!us
+if (!username || role !== "admin") {
+  alert("Unauthorized");
+  window.location.href = "/login";
+}
+
+async function loadPayments() {
+  const res = await fetch(`/api/admin/payments?username=${username}`);
+  const data = await res.json();
+
+  const tbody = document.getElementById("payments");
+  tbody.innerHTML = "";
+
+  data.forEach(p => {
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td>${p[0]}</td>
+      <td>${p[1]}</td>
+      <td>${p[2]}</td>
+      <td>${p[3]}</td>
+      <td>${p[4]}</td>
+      <td>
+        ${p[3] === "PENDING"
+          ? `<button class="btn btn-success btn-sm" onclick="approve(${p[0]})">Approve</button>`
+          : "—"}
+      </td>
+    `;
+
+    tbody.appendChild(row);
+  });
+}
+
+async function approve(id) {
+  await fetch(`/api/admin/approve/${id}?username=${username}`, {
+    method: "POST"
+  });
+  loadPayments();
+}
+
+function logout() {
+  localStorage.clear();
+  window.location.href = "/login";
+}
+
+loadPayments();
+</script>
+
+</body>
+</html>
