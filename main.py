@@ -179,6 +179,19 @@ async def upload_receipt(username: str, file: UploadFile = File(...)):
     return {"message": "Receipt uploaded. Awaiting admin approval."}
 
 # ---------------- ADMIN ----------------
+@app.get("/api/admin/users")
+def admin_users(username: str):
+    if not is_admin(username):
+        raise HTTPException(status_code=403, detail="Admin access only")
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT username, role FROM users ORDER BY username")
+    users = cur.fetchall()
+    conn.close()
+
+    return users
+
 @app.get("/api/admin/payments")
 def admin_payments(username: str):
     if not is_admin(username):
