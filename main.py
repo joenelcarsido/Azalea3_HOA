@@ -13,6 +13,7 @@ from database import init_db
 # ---------------- APP SETUP ----------------
 app = FastAPI()
 init_db()
+ensure_admin()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -23,6 +24,21 @@ DB = "hoa.db"
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def ensure_admin():
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
+
+    # Remove old admin if exists
+    cur.execute("DELETE FROM users WHERE username = 'admin'")
+
+    # Create fresh admin
+    cur.execute(
+        "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+        ("admin", pwd_context.hash("admin123"), "admin")
+    )
+
+    conn.commit()
+    conn.close()
 
 # ---------------- HELPERS ----------------
 def get_db():
