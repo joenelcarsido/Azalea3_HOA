@@ -10,37 +10,16 @@ import uuid
 
 from database import init_db
 
-# ---------------- APP SETUP ----------------
-app = FastAPI()
-init_db()
-ensure_admin()
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
+# ---------------- CONFIG ----------------
 DB = "hoa.db"
+UPLOAD_DIR = "uploads"
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-def ensure_admin():
-    conn = sqlite3.connect(DB)
-    cur = conn.cursor()
 
-    # Remove old admin if exists
-    cur.execute("DELETE FROM users WHERE username = 'admin'")
-
-    # Create fresh admin
-    cur.execute(
-        "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-        ("admin", pwd_context.hash("admin123"), "admin")
-    )
-
-    conn.commit()
-    conn.close()
-
-# ---------------- HELPERS ----------------
+# ---------------- DB HELPERS ----------------
 def get_db():
     return sqlite3.connect(DB)
 
@@ -57,6 +36,31 @@ def is_admin(username: str):
     row = cur.fetchone()
     conn.close()
     return row and row[0] == "admin"
+
+# ---------------- ADMIN BOOTSTRAP ----------------
+def ensure_admin():
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Remove old admin if exists
+    cur.execute("DELETE FROM users WHERE username='admin'")
+
+    # Create fresh admin
+    cur.execute(
+        "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+        ("admin", hash_password("admin123"), "admin")
+    )
+
+    conn.commit()
+    conn.close()
+
+# ---------------- APP SETUP ----------------
+app = FastAPI()
+
+init_db()
+ensure_admin()
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ---------------- ROOT ----------------
 @app.get("/")
@@ -128,6 +132,7 @@ def change_password(data: ChangePasswordData):
         "UPDATE users SET password=? WHERE username=?",
         (hash_password(data.new_password), data.username)
     )
+
     conn.commit()
     conn.close()
 
@@ -152,10 +157,11 @@ async def upload_receipt(username: str, file: UploadFile = File(...)):
 
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO payments (username, filename, status, uploaded_at)
-        VALUES (?, ?, 'PENDING', ?)
-    """, (username, filename, datetime.now().isoformat()))
+    cur.execute(
+        "INSERT INTO payments (username, filename, status, uploaded_at) VALUES (?, ?, 'PENDING', ?)",
+        (username, filename, datetime.now().isoformat())
+    )
+
     conn.commit()
     conn.close()
 
@@ -184,6 +190,7 @@ def approve_payment(payment_id: int, username: str):
     cur.execute("UPDATE payments SET status='APPROVED' WHERE id=?", (payment_id,))
     conn.commit()
     conn.close()
+
     return {"message": "Payment approved"}
 
 # ---------------- USER STATUS ----------------
@@ -191,13 +198,10 @@ def approve_payment(payment_id: int, username: str):
 def payment_status(username: str):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("""
-        SELECT status, uploaded_at
-        FROM payments
-        WHERE username=?
-        ORDER BY id DESC
-        LIMIT 1
-    """, (username,))
+    cur.execute(
+        "SELECT status, uploaded_at FROM payments WHERE username=? ORDER BY id DESC LIMIT 1",
+        (username,)
+    )
     row = cur.fetchone()
     conn.close()
 
