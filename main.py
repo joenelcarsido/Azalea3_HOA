@@ -12,12 +12,13 @@ UPLOAD_DIR = "uploads"
 STATIC_DIR = "static"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(STATIC_DIR, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
-# ---------------- ROOT (FIX 404) ----------------
+# ---------------- ROOT ----------------
 @app.get("/")
 def root():
     return RedirectResponse(url="/static/login.html")
@@ -25,7 +26,10 @@ def root():
 
 # ---------------- DB ----------------
 def get_db():
-    def init_db():
+    return sqlite3.connect(DB, check_same_thread=False)
+
+
+def init_db():
     conn = get_db()
     cur = conn.cursor()
 
@@ -65,9 +69,8 @@ def get_db():
     conn.close()
 
 
+# ✅ initialize DB on startup
 init_db()
-
-    return sqlite3.connect(DB, check_same_thread=False)
 
 
 # ---------------- USER UPLOAD ----------------
@@ -122,7 +125,7 @@ def user_payments(username: str):
     return rows
 
 
-# ---------------- ADMIN PAYMENTS (FIXED) ----------------
+# ---------------- ADMIN PAYMENTS ----------------
 @app.get("/api/admin/payments")
 def admin_payments(
     username: str,
@@ -134,6 +137,7 @@ def admin_payments(
 
     cur.execute("SELECT role FROM users WHERE username=?", (username,))
     role = cur.fetchone()
+
     if not role or role[0] != "admin":
         conn.close()
         raise HTTPException(status_code=403, detail="Forbidden")
