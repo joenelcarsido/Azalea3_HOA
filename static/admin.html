@@ -136,73 +136,63 @@ function applyFilter(){
 }
 
 /* ---------- PAYMENTS ---------- */
-async function loadPayments(){
-  const res = await fetch(`/api/admin/payments?month=${month}&year=${year}`);
+async function loadPayments() {
+  try {
+    const res = await fetch(
+      `/api/admin/payments?username=${username}&month=${month || ""}&year=${year || ""}`
+    );
 
-  if (!res.ok) {
+    if (!res.ok) {
+      throw new Error("Failed to load payments");
+    }
+
+    const data = await res.json();
+
+    totalCount.innerText = data.length;
+    pendingCount.innerText = data.filter(p => (p.status ?? p[3]) === "PENDING").length;
+
+    if (!data.length) {
+      paymentsTable.innerHTML =
+        `<tr><td colspan="8" class="text-center">No payments found</td></tr>`;
+      return;
+    }
+
+    paymentsTable.innerHTML = data.map(p => {
+      const id = p.id ?? p[0];
+      const user = p.username ?? p[1];
+      const receipt = p.filename ?? p[2];
+      const status = p.status ?? p[3];
+      const monthVal = p.month ?? p[5];
+      const yearVal = p.year ?? p[6];
+      const amount = p.amount ?? p[7] ?? "0.00";
+
+      return `
+      <tr>
+        <td>${id}</td>
+        <td>${user}</td>
+        <td>${monthVal}</td>
+        <td>${yearVal}</td>
+        <td>
+          <span class="badge ${
+            status === "PENDING" ? "badge-pending" :
+            status === "APPROVED" ? "badge-approved" : "badge-rejected"
+          }">${status}</span>
+        </td>
+        <td>₱${amount}</td>
+        <td><a href="/uploads/${receipt}" target="_blank">View</a></td>
+        <td>
+          ${status === "PENDING"
+            ? `<button class="btn btn-sm btn-success me-1" onclick="approve(${id})">Approve</button>
+               <button class="btn btn-sm btn-danger" onclick="reject(${id})">Reject</button>`
+            : "—"}
+        </td>
+      </tr>`;
+    }).join("");
+
+  } catch (err) {
     paymentsTable.innerHTML =
-      `<tr><td colspan="8" class="text-danger text-center">
-        Failed to load payments (${res.status})
-      </td></tr>`;
-    return;
+      `<tr><td colspan="8" class="text-danger text-center">${err.message}</td></tr>`;
   }
-
-  const result = await res.json();
-
-  // ✅ normalize backend response
-  const data = Array.isArray(result)
-    ? result
-    : Array.isArray(result.payments)
-      ? result.payments
-      : [];
-
-  totalCount.innerText = data.length;
-  pendingCount.innerText = data.filter(p => (p.status ?? p[3]) === "PENDING").length;
-
-  if (!data.length) {
-    paymentsTable.innerHTML =
-      `<tr><td colspan="8" class="text-center">No payments found</td></tr>`;
-    return;
-  }
-
-  paymentsTable.innerHTML = data.map(p => {
-    const id = p.id ?? p[0];
-    const user = p.username ?? p[1];
-    const receipt = p.receipt ?? p[2];
-    const status = p.status ?? p[3];
-    const monthVal = p.month ?? p[5];
-    const yearVal = p.year ?? p[6];
-    const amount = p.amount ?? p[7] ?? "0.00";
-
-    return `
-<tr>
-<td>${id}</td>
-<td>${user}</td>
-<td>${monthVal}</td>
-<td>${yearVal}</td>
-<td>
-  <span class="badge ${
-    status==="PENDING"?"badge-pending":
-    status==="APPROVED"?"badge-approved":"badge-rejected"
-  }">${status}</span>
-</td>
-<td>₱${amount}</td>
-<td><a href="/uploads/${receipt}" target="_blank">View</a></td>
-<td>
-  ${status==="PENDING"
-    ? `<button class="btn btn-sm btn-success me-1" onclick="approve(${id})">Approve</button>
-       <button class="btn btn-sm btn-danger" onclick="reject(${id})">Reject</button>`
-    : "—"}
-</td>
-</tr>`;
-  }).join("");
-}
-
-/* ---------- APPROVE ---------- */
-async function approve(id){
-  await fetch(`/api/admin/payments/${id}/approve`, { method:"POST" });
-  loadPayments();
-  loadMonthly();
 }
 
 /* ---------- REJECT ---------- */
@@ -242,3 +232,4 @@ loadPayments();
 
 </body>
 </html>
+
