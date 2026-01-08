@@ -124,26 +124,36 @@ for (let y = currentYear - 2; y <= currentYear + 1; y++) {
 /* ---------- UPLOAD ---------- */
 async function uploadReceipt() {
   const file = receipt.files[0];
-  if (!file || !month.value || !year.value) {
-    uploadMsg.innerHTML = `<span class="text-danger">All fields required</span>`;
+  const m = month.value;
+  const y = year.value;
+  const a = amount.value;
+  const msg = uploadMsg;
+
+  msg.innerHTML = "";
+
+  if (!file || !m || !y || !a) {
+    msg.innerHTML = `<span class="text-danger">All fields are required</span>`;
     return;
   }
 
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("amount", a);
 
   const res = await fetch(
-    `/api/upload-receipt?username=${username}&month=${month.value}&year=${year.value}`,
+    `/api/upload-receipt?username=${username}&month=${m}&year=${y}`,
     { method: "POST", body: formData }
   );
 
   const data = await res.json();
-  uploadMsg.innerHTML = res.ok
+
+  msg.innerHTML = res.ok
     ? `<span class="text-success">${data.message}</span>`
-    : `<span class="text-danger">${data.detail}</span>`;
+    : `<span class="text-danger">${data.detail || "Upload failed"}</span>`;
 
   loadHistory();
 }
+
 
 /* ---------- HISTORY ---------- */
 async function loadHistory() {
@@ -192,4 +202,5 @@ function logout() {
 
 </body>
 </html>
+
 
