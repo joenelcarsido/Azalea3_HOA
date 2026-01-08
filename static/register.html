@@ -1,20 +1,29 @@
 <!DOCTYPE html>
 <html>
-<head>
-<title>Register</title>
-</head>
+<head><title>Register</title></head>
 <body>
 
 <h2>Register</h2>
+<input id="username" placeholder="Username"><br>
+<input id="password" type="password" placeholder="Password"><br>
+<button onclick="register()">Register</button>
 
-<input id="username" placeholder="Username"><br><br>
-<input id="password" type="password" placeholder="Password"><br><br>
+<p id="msg"></p>
 
-<button id="registerBtn">Register</button>
-<p id="error" style="color:red"></p>
+<script>
+async function register(){
+  const res = await fetch("/api/register", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      username: username.value,
+      password: password.value
+    })
+  });
 
-<p><a href="login.html">Back to login</a></p>
-
-<script src="register.js"></script>
+  const data = await res.json();
+  msg.innerText = res.ok ? "Registered!" : data.detail;
+}
+</script>
 </body>
 </html>
