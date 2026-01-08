@@ -21,7 +21,7 @@ body { background:#f4f6f9 }
 <nav class="navbar navbar-dark bg-dark mb-4">
   <div class="container">
     <span class="navbar-brand">🛠 HOA Admin Dashboard</span>
-    <button class="btn btn-outline-light btn-sm" onclick="Admin.logout()">Logout</button>
+    <button class="btn btn-outline-light btn-sm" onclick="logout()">Logout</button>
   </div>
 </nav>
 
@@ -31,7 +31,7 @@ body { background:#f4f6f9 }
 <div class="row mb-4">
   <div class="col-md-3"><div class="card p-3 text-center"><h6>Pending</h6><h2 id="pendingCount">0</h2></div></div>
   <div class="col-md-3"><div class="card p-3 text-center"><h6>Total</h6><h2 id="totalCount">0</h2></div></div>
-  <div class="col-md-3"><div class="card p-3 text-center"><h6>Monthly</h6><h2 id="monthlyTotal">₱0</h2></div></div>
+  <div class="col-md-3"><div class="card p-3 text-center"><h6>Monthly Collection</h6><h2 id="monthlyTotal">₱0</h2></div></div>
   <div class="col-md-3"><div class="card p-3 text-center"><h6>Admin</h6><strong id="adminName"></strong></div></div>
 </div>
 
@@ -41,20 +41,32 @@ body { background:#f4f6f9 }
   <div class="col-md-3">
     <select id="filterMonth" class="form-select">
       <option value="">All Months</option>
-      <option>January</option><option>February</option><option>March</option>
-      <option>April</option><option>May</option><option>June</option>
-      <option>July</option><option>August</option><option>September</option>
-      <option>October</option><option>November</option><option>December</option>
+      <option value="January">January</option>
+      <option value="February">February</option>
+      <option value="March">March</option>
+      <option value="April">April</option>
+      <option value="May">May</option>
+      <option value="June">June</option>
+      <option value="July">July</option>
+      <option value="August">August</option>
+      <option value="September">September</option>
+      <option value="October">October</option>
+      <option value="November">November</option>
+      <option value="December">December</option>
     </select>
   </div>
+
   <div class="col-md-2">
     <select id="filterYear" class="form-select">
       <option value="">All Years</option>
-      <option>2025</option><option>2026</option><option>2027</option>
+      <option>2025</option>
+      <option>2026</option>
+      <option>2027</option>
     </select>
   </div>
+
   <div class="col-md-2">
-    <button class="btn btn-primary w-100" onclick="Admin.applyFilter()">Apply</button>
+    <button class="btn btn-primary w-100" onclick="applyFilter()">Apply</button>
   </div>
 </div>
 </div>
@@ -62,133 +74,130 @@ body { background:#f4f6f9 }
 <!-- PAYMENTS -->
 <div class="card p-3">
 <h5>Payment Approvals</h5>
+
+<div class="table-responsive">
 <table class="table table-striped align-middle">
 <thead>
 <tr>
-<th>ID</th><th>User</th><th>Month</th><th>Year</th>
-<th>Status</th><th>Receipt</th><th>Action</th>
+<th>ID</th>
+<th>User</th>
+<th>Month</th>
+<th>Year</th>
+<th>Status</th>
+<th>Amount</th>
+<th>Receipt</th>
+<th>Action</th>
 </tr>
 </thead>
-<tbody id="paymentsTable"></tbody>
+<tbody id="paymentsTable">
+<tr><td colspan="8" class="text-center">Loading...</td></tr>
+</tbody>
 </table>
 </div>
-
 </div>
 
-<!-- REJECT MODAL -->
-<div class="modal fade" id="rejectModal" tabindex="-1">
-<div class="modal-dialog">
-<div class="modal-content">
-<div class="modal-header"><h5>Reject Payment</h5></div>
-<div class="modal-body">
-<textarea id="rejectReason" class="form-control" placeholder="Reason"></textarea>
-<input type="hidden" id="rejectPaymentId">
-</div>
-<div class="modal-footer">
-<button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-<button class="btn btn-danger" onclick="Admin.confirmReject()">Reject</button>
-</div>
-</div>
-</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-const Admin = {
-  month: "",
-  year: "",
-  rejectModal: null,
+/* ---------- AUTH ---------- */
+const username = localStorage.getItem("username");
+const role = localStorage.getItem("role");
 
-  init() {
-    const username = localStorage.getItem("username");
-    const role = localStorage.getItem("role");
-    if (!username || role !== "admin") location.href="/login";
-    adminName.innerText = username;
+if (!username || role !== "admin") location.href="/login";
+adminName.innerText = username;
 
-    this.rejectModal = new bootstrap.Modal(
-      document.getElementById("rejectModal")
-    );
+let month="", year="";
 
-    this.loadPayments();
-  },
+/* ---------- FILTER ---------- */
+function applyFilter(){
+  month = filterMonth.value;
+  year = filterYear.value;
+  loadPayments();
+  loadMonthly();
+}
 
-  applyFilter() {
-    this.month = filterMonth.value;
-    this.year = filterYear.value;
-    this.loadPayments();
-    this.loadMonthly();
-  },
+/* ---------- PAYMENTS ---------- */
+async function loadPayments(){
+  const res = await fetch(`/api/admin/payments?month=${month}&year=${year}`);
+  const data = await res.json();
 
-  async loadPayments() {
-    const res = await fetch(`/api/admin/payments`);
-    const data = await res.json();
+  totalCount.innerText = data.length;
+  pendingCount.innerText = data.filter(p => (p.status ?? p[3]) === "PENDING").length;
 
-    totalCount.innerText = data.length;
-    pendingCount.innerText = data.filter(p => p[2] === "PENDING").length;
-
-    paymentsTable.innerHTML = data.map(p => `
-<tr>
-<td>${p[0]}</td>
-<td>${p[1]}</td>
-<td>${p[4]}</td>
-<td>${p[5]}</td>
-<td>
-<span class="badge ${
-p[2]==="PENDING"?"badge-pending":
-p[2]==="APPROVED"?"badge-approved":"badge-rejected"}">
-${p[2]}
-</span>
-</td>
-<td><a href="/uploads/${p[3]}" target="_blank">View</a></td>
-<td>
-${p[2]==="PENDING"?
-`<button class="btn btn-sm btn-success me-1" onclick="Admin.approve(${p[0]})">Approve</button>
-<button class="btn btn-sm btn-danger" onclick="Admin.openReject(${p[0]})">Reject</button>`
-:"—"}
-</td>
-</tr>`).join("");
-  },
-
-  async approve(id) {
-    await fetch(`/api/admin/payments/${id}/approve`, { method:"POST" });
-    this.loadPayments(); this.loadMonthly();
-  },
-
-  openReject(id) {
-    rejectPaymentId.value = id;
-    rejectReason.value = "";
-    this.rejectModal.show();
-  },
-
-  async confirmReject() {
-    await fetch(`/api/admin/payments/${rejectPaymentId.value}/reject`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ reason: rejectReason.value })
-    });
-    this.rejectModal.hide();
-    this.loadPayments(); this.loadMonthly();
-  },
-
-  async loadMonthly() {
-    if (!this.month || !this.year) {
-      monthlyTotal.innerText="₱0"; return;
-    }
-    const res = await fetch(
-      `/api/admin/reports/monthly?month=${this.month}&year=${this.year}`
-    );
-    const d = await res.json();
-    monthlyTotal.innerText="₱"+(d.total||0);
-  },
-
-  logout() {
-    localStorage.clear();
-    location.href="/login";
+  if (!data.length) {
+    paymentsTable.innerHTML = `<tr><td colspan="8" class="text-center">No payments found</td></tr>`;
+    return;
   }
-};
 
-Admin.init();
+  paymentsTable.innerHTML = data.map(p => {
+    const id = p.id ?? p[0];
+    const user = p.username ?? p[1];
+    const status = p.status ?? p[3];
+    const receipt = p.receipt ?? p[2];
+    const monthVal = p.month ?? p[5];
+    const yearVal = p.year ?? p[6];
+    const amount = p.amount ?? p[7] ?? "0.00";
+
+    return `
+<tr>
+<td>${id}</td>
+<td>${user}</td>
+<td>${monthVal}</td>
+<td>${yearVal}</td>
+<td>
+  <span class="badge ${
+    status==="PENDING"?"badge-pending":
+    status==="APPROVED"?"badge-approved":"badge-rejected"
+  }">${status}</span>
+</td>
+<td>₱${amount}</td>
+<td><a href="/uploads/${receipt}" target="_blank">View</a></td>
+<td>
+  ${status==="PENDING"
+    ? `<button class="btn btn-sm btn-success me-1" onclick="approve(${id})">Approve</button>
+       <button class="btn btn-sm btn-danger" onclick="reject(${id})">Reject</button>`
+    : "—"}
+</td>
+</tr>`;
+  }).join("");
+}
+
+/* ---------- APPROVE ---------- */
+async function approve(id){
+  await fetch(`/api/admin/payments/${id}/approve`, { method:"POST" });
+  loadPayments(); loadMonthly();
+}
+
+/* ---------- REJECT ---------- */
+async function reject(id){
+  const reason = prompt("Reject reason:");
+  if (!reason) return;
+
+  await fetch(`/api/admin/payments/${id}/reject`, {
+    method:"POST",
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({reason})
+  });
+
+  loadPayments(); loadMonthly();
+}
+
+/* ---------- MONTHLY REPORT ---------- */
+async function loadMonthly(){
+  if(!month || !year){ monthlyTotal.innerText="₱0"; return; }
+  const res = await fetch(`/api/admin/reports/monthly?month=${month}&year=${year}`);
+  const d = await res.json();
+  monthlyTotal.innerText = "₱" + d.total;
+}
+
+function logout(){
+  localStorage.clear();
+  location.href="/login";
+}
+
+loadPayments();
 </script>
 
 </body>
