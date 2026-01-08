@@ -77,12 +77,13 @@
             <th>Month</th>
             <th>Year</th>
             <th>Status</th>
+            <th>Amount</th>
             <th>Receipt</th>
           </tr>
         </thead>
         <tbody id="historyTable">
           <tr>
-            <td colspan="5" class="text-center">Loading...</td>
+            <td colspan="6" class="text-center">Loading...</td>
           </tr>
         </tbody>
       </table>
@@ -151,7 +152,7 @@ async function loadHistory() {
   const tbody = document.getElementById("historyTable");
 
   if (!data.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center">No payments yet</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center">No payments yet</td></tr>`;
     return;
   }
 
@@ -165,6 +166,7 @@ async function loadHistory() {
           ${p[2]}
         </span>
       </td>
+      <td>₱${p[6] ?? "0.00"}</td>
       <td><a href="/uploads/${p[1]}" target="_blank">View</a></td>
     </tr>
   `).join("");
