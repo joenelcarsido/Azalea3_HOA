@@ -71,6 +71,34 @@ def init_db():
 
 # ✅ initialize DB on startup
 init_db()
+from pydantic import BaseModel
+
+# ---------------- LOGIN MODEL ----------------
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+# ---------------- LOGIN API ----------------
+@app.post("/api/login")
+def login(data: LoginRequest):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT username, role FROM users WHERE username=? AND password=?",
+        (data.username, data.password)
+    )
+    user = cur.fetchone()
+    conn.close()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    return {
+        "username": user[0],
+        "role": user[1]
+    }
 
 
 # ---------------- USER UPLOAD ----------------
