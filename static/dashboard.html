@@ -38,18 +38,12 @@
         <label class="form-label">Month</label>
         <select id="month" class="form-select">
           <option value="">Select month</option>
-          <option>January</option>
-          <option>February</option>
-          <option>March</option>
-          <option>April</option>
-          <option>May</option>
-          <option>June</option>
-          <option>July</option>
-          <option>August</option>
-          <option>September</option>
-          <option>October</option>
-          <option>November</option>
-          <option>December</option>
+          <option>January</option><option>February</option>
+          <option>March</option><option>April</option>
+          <option>May</option><option>June</option>
+          <option>July</option><option>August</option>
+          <option>September</option><option>October</option>
+          <option>November</option><option>December</option>
         </select>
       </div>
 
@@ -97,31 +91,21 @@
 const username = localStorage.getItem("username");
 const role = localStorage.getItem("role");
 
-if (!username || role !== "homeowner") {
-  window.location.href = "/login";
-}
-
+if (!username || role !== "homeowner") location.href = "/login";
 document.getElementById("username").innerText = username;
 
 /* ---------- YEAR OPTIONS ---------- */
 const yearSelect = document.getElementById("year");
 const currentYear = new Date().getFullYear();
-
 for (let y = currentYear - 2; y <= currentYear + 1; y++) {
-  yearSelect.innerHTML += `<option value="${y}">${y}</option>`;
+  yearSelect.innerHTML += `<option>${y}</option>`;
 }
 
 /* ---------- UPLOAD ---------- */
 async function uploadReceipt() {
-  const file = document.getElementById("receipt").files[0];
-  const month = document.getElementById("month").value;
-  const year = document.getElementById("year").value;
-  const msg = document.getElementById("uploadMsg");
-
-  msg.innerHTML = "";
-
-  if (!file || !month || !year) {
-    msg.innerHTML = `<span class="text-danger">All fields are required</span>`;
+  const file = receipt.files[0];
+  if (!file || !month.value || !year.value) {
+    uploadMsg.innerHTML = `<span class="text-danger">All fields required</span>`;
     return;
   }
 
@@ -129,18 +113,15 @@ async function uploadReceipt() {
   formData.append("file", file);
 
   const res = await fetch(
-    `/api/upload-receipt?username=${username}&month=${month}&year=${year}`,
+    `/api/upload-receipt?username=${username}&month=${month.value}&year=${year.value}`,
     { method: "POST", body: formData }
   );
 
   const data = await res.json();
+  uploadMsg.innerHTML = res.ok
+    ? `<span class="text-success">${data.message}</span>`
+    : `<span class="text-danger">${data.detail}</span>`;
 
-  if (!res.ok) {
-    msg.innerHTML = `<span class="text-danger">${data.detail || "Upload failed"}</span>`;
-    return;
-  }
-
-  msg.innerHTML = `<span class="text-success">${data.message}</span>`;
   loadHistory();
 }
 
@@ -148,7 +129,6 @@ async function uploadReceipt() {
 async function loadHistory() {
   const res = await fetch(`/api/user/payments/${username}`);
   const data = await res.json();
-
   const tbody = document.getElementById("historyTable");
 
   if (!data.length) {
@@ -156,20 +136,29 @@ async function loadHistory() {
     return;
   }
 
-  tbody.innerHTML = data.map((p, i) => `
+  tbody.innerHTML = data.map((p, i) => {
+    const amount =
+      p.amount ??        // object format
+      p[6] ??             // array with amount
+      p[3] ??             // fallback index
+      "0.00";
+
+    return `
     <tr>
       <td>${i + 1}</td>
-      <td>${p[4]}</td>
-      <td>${p[5]}</td>
+      <td>${p.month ?? p[4]}</td>
+      <td>${p.year ?? p[5]}</td>
       <td>
-        <span class="badge ${p[2] === "APPROVED" ? "bg-success" : "bg-warning text-dark"}">
-          ${p[2]}
+        <span class="badge ${p.status === "APPROVED" || p[2] === "APPROVED"
+          ? "bg-success"
+          : "bg-warning text-dark"}">
+          ${p.status ?? p[2]}
         </span>
       </td>
-      <td>₱${p[6] ?? "0.00"}</td>
-      <td><a href="/uploads/${p[1]}" target="_blank">View</a></td>
-    </tr>
-  `).join("");
+      <td>₱${amount}</td>
+      <td><a href="/uploads/${p.receipt ?? p[1]}" target="_blank">View</a></td>
+    </tr>`;
+  }).join("");
 }
 
 loadHistory();
@@ -177,7 +166,7 @@ loadHistory();
 /* ---------- LOGOUT ---------- */
 function logout() {
   localStorage.clear();
-  window.location.href = "/login";
+  location.href = "/login";
 }
 </script>
 
