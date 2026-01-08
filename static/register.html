@@ -1,133 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HOA Register</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body {
-      background: #f4f6f9;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .register-card {
-      width: 100%;
-      max-width: 420px;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-      background: #fff;
-    }
-  </style>
+<title>Register</title>
 </head>
 <body>
 
-<div class="register-card">
-  <h3 class="text-center mb-4">Create Account</h3>
+<h2>Register</h2>
 
-  <div class="mb-3">
-    <label class="form-label">Username</label>
-    <input type="text" id="username" class="form-control" placeholder="Choose a username" />
-  </div>
+<input id="username" placeholder="Username"><br><br>
+<input id="password" type="password" placeholder="Password"><br><br>
 
-  <div class="mb-3">
-    <label class="form-label">Password</label>
-    <input type="password" id="password" class="form-control" placeholder="Choose a password" />
-  </div>
+<button id="registerBtn">Register</button>
+<p id="error" style="color:red"></p>
 
-  <div class="mb-3">
-    <label class="form-label">Confirm Password</label>
-    <input type="password" id="confirm" class="form-control" placeholder="Confirm password" />
-  </div>
+<p><a href="login.html">Back to login</a></p>
 
-  <div id="error" class="text-danger mb-3" style="display:none"></div>
-  <div id="success" class="text-success mb-3" style="display:none"></div>
-
-  <button class="btn btn-success w-100" onclick="register()">Register</button>
-
-  <div class="text-center mt-3">
-    <small>
-      Already have an account?
-      <a href="/login">Login</a>
-    </small>
-  </div>
-</div>
-
-<script>
-async function register() {
-  const username = document.getElementById("username").value.trim();
-  const password = document.getElementById("password").value;
-  const confirm = document.getElementById("confirm").value;
-  const errorDiv = document.getElementById("error");
-  const successDiv = document.getElementById("success");
-
-  errorDiv.style.display = "none";
-  successDiv.style.display = "none";
-
-  // 🔒 Prevent admin creation
-  if (username.toLowerCase() === "admin") {
-    errorDiv.innerText = "This username is reserved";
-    errorDiv.style.display = "block";
-    return;
-  }
-
-  if (!username || !password || !confirm) {
-    errorDiv.innerText = "All fields are required";
-    errorDiv.style.display = "block";
-    return;
-  }
-
-  if (password.length < 6) {
-    errorDiv.innerText = "Password must be at least 6 characters";
-    errorDiv.style.display = "block";
-    return;
-  }
-
-  if (password !== confirm) {
-    errorDiv.innerText = "Passwords do not match";
-    errorDiv.style.display = "block";
-    return;
-  }
-
-  try {
-    const res = await fetch("/api/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.detail || "Registration failed");
-    }
-
-    successDiv.innerText = "Registration successful! Redirecting to login...";
-    successDiv.style.display = "block";
-
-    // Clear form
-    document.getElementById("username").value = "";
-    document.getElementById("password").value = "";
-    document.getElementById("confirm").value = "";
-
-    setTimeout(() => {
-      window.location.href = "/login";
-    }, 1500);
-
-  } catch (err) {
-    errorDiv.innerText = err.message;
-    errorDiv.style.display = "block";
-  }
-}
-
-// ✅ Allow Enter key to submit
-document.addEventListener("keypress", function (e) {
-  if (e.key === "Enter") register();
-});
-</script>
-
+<script src="register.js"></script>
 </body>
 </html>
