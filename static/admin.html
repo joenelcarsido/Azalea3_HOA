@@ -29,46 +29,63 @@ body { background:#f4f6f9 }
 
 <!-- SUMMARY -->
 <div class="row mb-4">
-  <div class="col-md-3"><div class="card p-3 text-center"><h6>Pending</h6><h2 id="pendingCount">0</h2></div></div>
-  <div class="col-md-3"><div class="card p-3 text-center"><h6>Total</h6><h2 id="totalCount">0</h2></div></div>
-  <div class="col-md-3"><div class="card p-3 text-center"><h6>Monthly Collection</h6><h2 id="monthlyTotal">₱0</h2></div></div>
-  <div class="col-md-3"><div class="card p-3 text-center"><h6>Admin</h6><strong id="adminName"></strong></div></div>
+  <div class="col-md-3">
+    <div class="card p-3 text-center">
+      <h6>Pending</h6>
+      <h2 id="pendingCount">0</h2>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card p-3 text-center">
+      <h6>Total</h6>
+      <h2 id="totalCount">0</h2>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card p-3 text-center">
+      <h6>Monthly Collection</h6>
+      <h2 id="monthlyTotal">₱0</h2>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card p-3 text-center">
+      <h6>Admin</h6>
+      <strong id="adminName"></strong>
+    </div>
+  </div>
 </div>
 
 <!-- FILTER -->
 <div class="card p-3 mb-4">
-<div class="row g-2">
-  <div class="col-md-3">
-    <select id="filterMonth" class="form-select">
-      <option value="">All Months</option>
-      <option value="January">January</option>
-      <option value="February">February</option>
-      <option value="March">March</option>
-      <option value="April">April</option>
-      <option value="May">May</option>
-      <option value="June">June</option>
-      <option value="July">July</option>
-      <option value="August">August</option>
-      <option value="September">September</option>
-      <option value="October">October</option>
-      <option value="November">November</option>
-      <option value="December">December</option>
-    </select>
-  </div>
+  <div class="row g-2">
+    <div class="col-md-3">
+      <select id="filterMonth" class="form-select">
+        <option value="">All Months</option>
+        <option>January</option><option>February</option>
+        <option>March</option><option>April</option>
+        <option>May</option><option>June</option>
+        <option>July</option><option>August</option>
+        <option>September</option><option>October</option>
+        <option>November</option><option>December</option>
+      </select>
+    </div>
 
-  <div class="col-md-2">
-    <select id="filterYear" class="form-select">
-      <option value="">All Years</option>
-      <option>2025</option>
-      <option>2026</option>
-      <option>2027</option>
-    </select>
-  </div>
+    <div class="col-md-2">
+      <select id="filterYear" class="form-select">
+        <option value="">All Years</option>
+        <option>2025</option>
+        <option>2026</option>
+        <option>2027</option>
+      </select>
+    </div>
 
-  <div class="col-md-2">
-    <button class="btn btn-primary w-100" onclick="applyFilter()">Apply</button>
+    <div class="col-md-2">
+      <button class="btn btn-primary w-100" onclick="applyFilter()">Apply</button>
+    </div>
   </div>
-</div>
 </div>
 
 <!-- PAYMENTS -->
@@ -79,14 +96,14 @@ body { background:#f4f6f9 }
 <table class="table table-striped align-middle">
 <thead>
 <tr>
-<th>ID</th>
-<th>User</th>
-<th>Month</th>
-<th>Year</th>
-<th>Status</th>
-<th>Amount</th>
-<th>Receipt</th>
-<th>Action</th>
+  <th>ID</th>
+  <th>User</th>
+  <th>Month</th>
+  <th>Year</th>
+  <th>Status</th>
+  <th>Amount</th>
+  <th>Receipt</th>
+  <th>Action</th>
 </tr>
 </thead>
 <tbody id="paymentsTable">
@@ -108,7 +125,7 @@ const role = localStorage.getItem("role");
 if (!username || role !== "admin") location.href="/login";
 adminName.innerText = username;
 
-let month="", year="";
+let month = "", year = "";
 
 /* ---------- FILTER ---------- */
 function applyFilter(){
@@ -121,21 +138,38 @@ function applyFilter(){
 /* ---------- PAYMENTS ---------- */
 async function loadPayments(){
   const res = await fetch(`/api/admin/payments?month=${month}&year=${year}`);
-  const data = await res.json();
+
+  if (!res.ok) {
+    paymentsTable.innerHTML =
+      `<tr><td colspan="8" class="text-danger text-center">
+        Failed to load payments (${res.status})
+      </td></tr>`;
+    return;
+  }
+
+  const result = await res.json();
+
+  // ✅ normalize backend response
+  const data = Array.isArray(result)
+    ? result
+    : Array.isArray(result.payments)
+      ? result.payments
+      : [];
 
   totalCount.innerText = data.length;
   pendingCount.innerText = data.filter(p => (p.status ?? p[3]) === "PENDING").length;
 
   if (!data.length) {
-    paymentsTable.innerHTML = `<tr><td colspan="8" class="text-center">No payments found</td></tr>`;
+    paymentsTable.innerHTML =
+      `<tr><td colspan="8" class="text-center">No payments found</td></tr>`;
     return;
   }
 
   paymentsTable.innerHTML = data.map(p => {
     const id = p.id ?? p[0];
     const user = p.username ?? p[1];
-    const status = p.status ?? p[3];
     const receipt = p.receipt ?? p[2];
+    const status = p.status ?? p[3];
     const monthVal = p.month ?? p[5];
     const yearVal = p.year ?? p[6];
     const amount = p.amount ?? p[7] ?? "0.00";
@@ -167,7 +201,8 @@ async function loadPayments(){
 /* ---------- APPROVE ---------- */
 async function approve(id){
   await fetch(`/api/admin/payments/${id}/approve`, { method:"POST" });
-  loadPayments(); loadMonthly();
+  loadPayments();
+  loadMonthly();
 }
 
 /* ---------- REJECT ---------- */
@@ -178,20 +213,25 @@ async function reject(id){
   await fetch(`/api/admin/payments/${id}/reject`, {
     method:"POST",
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({reason})
+    body:JSON.stringify({ reason })
   });
 
-  loadPayments(); loadMonthly();
+  loadPayments();
+  loadMonthly();
 }
 
 /* ---------- MONTHLY REPORT ---------- */
 async function loadMonthly(){
-  if(!month || !year){ monthlyTotal.innerText="₱0"; return; }
+  if(!month || !year){
+    monthlyTotal.innerText = "₱0";
+    return;
+  }
   const res = await fetch(`/api/admin/reports/monthly?month=${month}&year=${year}`);
   const d = await res.json();
-  monthlyTotal.innerText = "₱" + d.total;
+  monthlyTotal.innerText = "₱" + (d.total ?? 0);
 }
 
+/* ---------- LOGOUT ---------- */
 function logout(){
   localStorage.clear();
   location.href="/login";
