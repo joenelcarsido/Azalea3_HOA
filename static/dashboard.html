@@ -29,117 +29,99 @@
     <small class="text-muted">Role: Homeowner</small>
   </div>
 
-  <!-- UPLOAD RECEIPT -->
-<div class="card p-3 mb-4">
-  <h5>Submit HOA Payment Receipt</h5>
+  <!-- SUBMIT PAYMENT -->
+  <div class="card p-3 mb-4">
+    <h5>Submit HOA Payment Receipt</h5>
 
-  <div class="row g-2 mb-3">
-    <div class="col-md-4">
-      <label class="form-label">Month</label>
-      <select id="month" class="form-select" required>
-        <option value="">Select month</option>
-        <option>January</option><option>February</option>
-        <option>March</option><option>April</option>
-        <option>May</option><option>June</option>
-        <option>July</option><option>August</option>
-        <option>September</option><option>October</option>
-        <option>November</option><option>December</option>
-      </select>
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Month</label>
+        <select id="month" class="form-select" required>
+          <option value="">Select month</option>
+          <option>January</option><option>February</option>
+          <option>March</option><option>April</option>
+          <option>May</option><option>June</option>
+          <option>July</option><option>August</option>
+          <option>September</option><option>October</option>
+          <option>November</option><option>December</option>
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Year</label>
+        <select id="year" class="form-select" required></select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Amount (₱)</label>
+        <input
+          type="number"
+          id="amount"
+          class="form-control"
+          placeholder="e.g. 1500"
+          min="1"
+          step="0.01"
+          required
+        >
+      </div>
     </div>
 
-    <div class="col-md-4">
-      <label class="form-label">Year</label>
-      <select id="year" class="form-select" required></select>
-    </div>
+    <input type="file" id="receipt" class="form-control mb-3" required />
 
-    <div class="col-md-4">
-      <label class="form-label">Amount (₱)</label>
-      <input
-        type="number"
-        id="amount"
-        class="form-control"
-        placeholder="e.g. 1500"
-        min="1"
-        step="0.01"
-        required
-      >
-    </div>
+    <button class="btn btn-primary w-100" onclick="uploadReceipt()">
+      Upload Receipt
+    </button>
+
+    <div id="uploadMsg" class="mt-3"></div>
   </div>
-
-  <input type="file" id="receipt" class="form-control mb-3" required />
-
-  <button class="btn btn-primary w-100" onclick="uploadReceipt()">
-    Upload Receipt
-  </button>
-
-  <div id="uploadMsg" class="mt-3"></div>
-</div>
-
- 
 
   <!-- PAYMENT HISTORY -->
-<div class="card p-3 mb-4">
-  <h5>Submit HOA Payment Receipt</h5>
+  <div class="card p-3 mb-4">
+    <h5>Payment History</h5>
 
-  <div class="row g-2 mb-3">
-    <div class="col-md-4">
-      <label class="form-label">Month</label>
-      <select id="month" class="form-select" required>
-        <option value="">Select month</option>
-        <option>January</option><option>February</option>
-        <option>March</option><option>April</option>
-        <option>May</option><option>June</option>
-        <option>July</option><option>August</option>
-        <option>September</option><option>October</option>
-        <option>November</option><option>December</option>
-      </select>
-    </div>
-
-    <div class="col-md-4">
-      <label class="form-label">Year</label>
-      <select id="year" class="form-select" required></select>
-    </div>
-
-    <div class="col-md-4">
-      <label class="form-label">Amount (₱)</label>
-      <input
-        type="number"
-        id="amount"
-        class="form-control"
-        placeholder="e.g. 1500"
-        min="1"
-        step="0.01"
-        required
-      >
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Month</th>
+            <th>Year</th>
+            <th>Status</th>
+            <th>Amount</th>
+            <th>Receipt</th>
+          </tr>
+        </thead>
+        <tbody id="historyTable">
+          <tr>
+            <td colspan="6" class="text-center">Loading...</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
-  <input type="file" id="receipt" class="form-control mb-3" required />
-
-  <button class="btn btn-primary w-100" onclick="uploadReceipt()">
-    Upload Receipt
-  </button>
-
-  <div id="uploadMsg" class="mt-3"></div>
 </div>
-
 
 <script>
 /* ---------- AUTH ---------- */
 const username = localStorage.getItem("username");
 const role = localStorage.getItem("role");
 
-if (!username || role !== "homeowner") location.href = "/login";
+if (!username || role !== "homeowner") {
+  window.location.href = "/login";
+}
+
 document.getElementById("username").innerText = username;
 
 /* ---------- YEAR OPTIONS ---------- */
 const yearSelect = document.getElementById("year");
 const currentYear = new Date().getFullYear();
+
 for (let y = currentYear - 2; y <= currentYear + 1; y++) {
-  yearSelect.innerHTML += `<option>${y}</option>`;
+  yearSelect.innerHTML += `<option value="${y}">${y}</option>`;
 }
 
-/* ---------- UPLOAD ---------- */
+/* ---------- UPLOAD RECEIPT ---------- */
 async function uploadReceipt() {
   const file = receipt.files[0];
   const m = month.value;
@@ -169,11 +151,13 @@ async function uploadReceipt() {
     ? `<span class="text-success">${data.message}</span>`
     : `<span class="text-danger">${data.detail || "Upload failed"}</span>`;
 
+  receipt.value = "";
+  amount.value = "";
+
   loadHistory();
 }
 
-
-/* ---------- HISTORY ---------- */
+/* ---------- PAYMENT HISTORY ---------- */
 async function loadHistory() {
   const res = await fetch(`/api/user/payments/${username}`);
   const data = await res.json();
@@ -185,27 +169,34 @@ async function loadHistory() {
   }
 
   tbody.innerHTML = data.map((p, i) => {
-    const amount =
-      p.amount ??        // object format
-      p[6] ??             // array with amount
-      p[3] ??             // fallback index
-      "0.00";
+    const status = p.status ?? p[2];
+    const amount = p.amount ?? p[6] ?? "0.00";
+    const month = p.month ?? p[4];
+    const year = p.year ?? p[5];
+    const receiptFile = p.receipt ?? p[1];
 
     return `
-    <tr>
-      <td>${i + 1}</td>
-      <td>${p.month ?? p[4]}</td>
-      <td>${p.year ?? p[5]}</td>
-      <td>
-        <span class="badge ${p.status === "APPROVED" || p[2] === "APPROVED"
-          ? "bg-success"
-          : "bg-warning text-dark"}">
-          ${p.status ?? p[2]}
-        </span>
-      </td>
-      <td>₱${amount}</td>
-      <td><a href="/uploads/${p.receipt ?? p[1]}" target="_blank">View</a></td>
-    </tr>`;
+      <tr>
+        <td>${i + 1}</td>
+        <td>${month}</td>
+        <td>${year}</td>
+        <td>
+          <span class="badge ${
+            status === "APPROVED"
+              ? "bg-success"
+              : status === "REJECTED"
+              ? "bg-danger"
+              : "bg-warning text-dark"
+          }">
+            ${status}
+          </span>
+        </td>
+        <td>₱${amount}</td>
+        <td>
+          <a href="/uploads/${receiptFile}" target="_blank">View</a>
+        </td>
+      </tr>
+    `;
   }).join("");
 }
 
@@ -214,44 +205,9 @@ loadHistory();
 /* ---------- LOGOUT ---------- */
 function logout() {
   localStorage.clear();
-  location.href = "/login";
+  window.location.href = "/login";
 }
-async function uploadReceipt() {
-  const file = receipt.files[0];
-  const m = month.value;
-  const y = year.value;
-  const a = amount.value;
-  const msg = uploadMsg;
-
-  msg.innerHTML = "";
-
-  if (!file || !m || !y || !a) {
-    msg.innerHTML = `<span class="text-danger">All fields are required</span>`;
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("amount", a);
-
-  const res = await fetch(
-    `/api/upload-receipt?username=${username}&month=${m}&year=${y}`,
-    { method: "POST", body: formData }
-  );
-
-  const data = await res.json();
-
-  msg.innerHTML = res.ok
-    ? `<span class="text-success">${data.message}</span>`
-    : `<span class="text-danger">${data.detail || "Upload failed"}</span>`;
-
-  loadHistory();
-}
-  
 </script>
 
 </body>
 </html>
-
-
-
