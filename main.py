@@ -25,6 +25,48 @@ def root():
 
 # ---------------- DB ----------------
 def get_db():
+    def init_db():
+    conn = get_db()
+    cur = conn.cursor()
+
+    # users table
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT,
+        role TEXT
+    )
+    """)
+
+    # payments table
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        filename TEXT,
+        status TEXT,
+        uploaded_at TEXT,
+        month TEXT,
+        year TEXT,
+        amount REAL
+    )
+    """)
+
+    # default admin
+    cur.execute("SELECT * FROM users WHERE username='admin'")
+    if not cur.fetchone():
+        cur.execute(
+            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            ("admin", "admin123", "admin")
+        )
+
+    conn.commit()
+    conn.close()
+
+
+init_db()
+
     return sqlite3.connect(DB, check_same_thread=False)
 
 
