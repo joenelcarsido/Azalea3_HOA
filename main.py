@@ -1,21 +1,29 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 from datetime import datetime
 import sqlite3, os, uuid
 
 app = FastAPI()
 
+# ---------------- CONFIG ----------------
 DB = "hoa.db"
 UPLOAD_DIR = "uploads"
 STATIC_DIR = "static"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# ✅ Serve static files correctly
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
+# ---------------- ROOT (FIX 404) ----------------
+@app.get("/")
+def root():
+    return RedirectResponse(url="/static/login.html")
+
+
+# ---------------- DB ----------------
 def get_db():
     return sqlite3.connect(DB, check_same_thread=False)
 
@@ -51,7 +59,6 @@ async def upload_receipt(
 
     conn.commit()
     conn.close()
-
     return {"message": "Receipt uploaded"}
 
 
@@ -73,10 +80,10 @@ def user_payments(username: str):
     return rows
 
 
-# ---------------- ADMIN PAYMENTS ----------------
+# ---------------- ADMIN PAYMENTS (FIXED) ----------------
 @app.get("/api/admin/payments")
 def admin_payments(
-    username: str = Query(...),
+    username: str,
     month: str | None = None,
     year: str | None = None
 ):
@@ -84,8 +91,8 @@ def admin_payments(
     cur = conn.cursor()
 
     cur.execute("SELECT role FROM users WHERE username=?", (username,))
-    r = cur.fetchone()
-    if not r or r[0] != "admin":
+    role = cur.fetchone()
+    if not role or role[0] != "admin":
         conn.close()
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -105,9 +112,9 @@ def admin_payments(
     query += " ORDER BY uploaded_at DESC"
 
     cur.execute(query, params)
-    data = cur.fetchall()
+    rows = cur.fetchall()
     conn.close()
-    return data
+    return rows
 
 
 # ---------------- APPROVE ----------------
