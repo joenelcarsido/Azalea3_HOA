@@ -4,28 +4,29 @@
   <title>Login</title>
 </head>
 <body>
+
 <h2>Login</h2>
 
-<input id="username" placeholder="Username"><br>
-<input id="password" type="password" placeholder="Password"><br>
-<button onclick="login()">Login</button>
+<input id="username" placeholder="Username"><br><br>
+<input id="password" type="password" placeholder="Password"><br><br>
 
+<button onclick="login()">Login</button>
 <p id="error" style="color:red"></p>
-<a href="register.html">Register</a>
 
 <script>
 async function login() {
+  const username = usernameInput.value;
+  const password = passwordInput.value;
+
   const res = await fetch("/api/login", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({
-      username: username.value,
-      password: password.value
-    })
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ username, password })
   });
 
   const data = await res.json();
-  if(!res.ok){
+
+  if (!res.ok) {
     error.innerText = data.detail;
     return;
   }
@@ -33,10 +34,13 @@ async function login() {
   localStorage.setItem("username", data.username);
   localStorage.setItem("role", data.role);
 
-  location.href = data.role === "admin"
-    ? "/static/admin.html"
-    : "/static/dashboard.html";
+  if (data.role === "admin") {
+    location.href = "/static/admin.html";
+  } else {
+    location.href = "/static/dashboard.html";
+  }
 }
 </script>
+
 </body>
 </html>
