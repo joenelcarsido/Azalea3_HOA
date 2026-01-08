@@ -225,25 +225,49 @@ def admin_users(username: str = Query(...)):
 
 
 # ---------------- ADMIN PAYMENTS ----------------
+# =======================
+# ADMIN – VIEW PAYMENTS
+# =======================
+
 @app.get("/api/admin/payments")
-def admin_payments(username: str = Query(...)):
+def admin_payments(
+    username: str = Query(...),
+    month: str | None = None,
+    year: str | None = None
+):
     conn = get_db()
     cur = conn.cursor()
 
+    # verify admin
     cur.execute("SELECT role FROM users WHERE username=?", (username,))
     row = cur.fetchone()
     if not row or row[0] != "admin":
         conn.close()
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    cur.execute("""
-        SELECT id, username, filename, status, uploaded_at, month, year
+    query = """
+        SELECT id, username, filename, status, uploaded_at, month, year, amount
         FROM payments
-        ORDER BY uploaded_at DESC
-    """)
+        WHERE 1=1
+    """
+    params = []
+
+    if month:
+        query += " AND month=?"
+        params.append(month)
+
+    if year:
+        query += " AND year=?"
+        params.append(year)
+
+    query += " ORDER BY uploaded_at DESC"
+
+    cur.execute(query, params)
     payments = cur.fetchall()
     conn.close()
+
     return payments
+
 
 
 # ---------------- APPROVE PAYMENT ----------------
