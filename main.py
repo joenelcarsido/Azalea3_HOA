@@ -1,48 +1,43 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import sqlite3
-import os
-import uuid
 from datetime import datetime
+import sqlite3, os, uuid
 
 app = FastAPI()
 
 DB = "hoa.db"
 UPLOAD_DIR = "uploads"
+STATIC_DIR = "static"
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# ✅ Serve static files correctly
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-# -------------------------
-# DATABASE
-# -------------------------
+
 def get_db():
     return sqlite3.connect(DB, check_same_thread=False)
 
 
-# -------------------------
-# USER – UPLOAD PAYMENT
-# -------------------------
+# ---------------- USER UPLOAD ----------------
 @app.post("/api/upload-receipt")
 async def upload_receipt(
     username: str,
     month: str,
     year: str,
-    file: UploadFile = File(...),
-    amount: float = Query(...)
+    amount: float = Query(...),
+    file: UploadFile = File(...)
 ):
     conn = get_db()
     cur = conn.cursor()
 
     filename = f"{uuid.uuid4()}_{file.filename}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    with open(filepath, "wb") as f:
+    with open(f"{UPLOAD_DIR}/{filename}", "wb") as f:
         f.write(await file.read())
 
     cur.execute("""
-        INSERT INTO payments 
+        INSERT INTO payments
         (username, filename, status, uploaded_at, month, year, amount)
         VALUES (?, ?, 'PENDING', ?, ?, ?, ?)
     """, (
@@ -57,12 +52,10 @@ async def upload_receipt(
     conn.commit()
     conn.close()
 
-    return {"message": "Payment uploaded successfully"}
+    return {"message": "Receipt uploaded"}
 
 
-# -------------------------
-# USER – PAYMENT HISTORY
-# -------------------------
+# ---------------- USER HISTORY ----------------
 @app.get("/api/user/payments/{username}")
 def user_payments(username: str):
     conn = get_db()
@@ -75,14 +68,12 @@ def user_payments(username: str):
         ORDER BY uploaded_at DESC
     """, (username,))
 
-    data = cur.fetchall()
+    rows = cur.fetchall()
     conn.close()
-    return data
+    return rows
 
 
-# -------------------------
-# ADMIN – VIEW PAYMENTS
-# -------------------------
+# ---------------- ADMIN PAYMENTS ----------------
 @app.get("/api/admin/payments")
 def admin_payments(
     username: str = Query(...),
@@ -92,32 +83,21 @@ def admin_payments(
     conn = get_db()
     cur = conn.cursor()
 
-    # validate admin
     cur.execute("SELECT role FROM users WHERE username=?", (username,))
-    row = cur.fetchone()
-    if not row or row[0] != "admin":
+    r = cur.fetchone()
+    if not r or r[0] != "admin":
         conn.close()
         raise HTTPException(status_code=403, detail="Forbidden")
 
     query = """
-        SELECT
-            id,
-            username,
-            filename,
-            status,
-            uploaded_at,
-            month,
-            year,
-            amount
-        FROM payments
-        WHERE 1=1
+        SELECT id, username, filename, status, uploaded_at, month, year, amount
+        FROM payments WHERE 1=1
     """
     params = []
 
     if month:
         query += " AND month=?"
         params.append(month)
-
     if year:
         query += " AND year=?"
         params.append(year)
@@ -125,64 +105,28 @@ def admin_payments(
     query += " ORDER BY uploaded_at DESC"
 
     cur.execute(query, params)
-    payments = cur.fetchall()
+    data = cur.fetchall()
     conn.close()
+    return data
 
-    return payments
 
-
-# -------------------------
-# ADMIN – APPROVE PAYMENT
-# -------------------------
+# ---------------- APPROVE ----------------
 @app.post("/api/admin/payments/{pid}/approve")
-def approve_payment(pid: int):
+def approve(pid: int):
     conn = get_db()
     cur = conn.cursor()
-
-    cur.execute(
-        "UPDATE payments SET status='APPROVED' WHERE id=?",
-        (pid,)
-    )
-
+    cur.execute("UPDATE payments SET status='APPROVED' WHERE id=?", (pid,))
     conn.commit()
     conn.close()
-    return {"message": "Payment approved"}
+    return {"message": "Approved"}
 
 
-# -------------------------
-# ADMIN – REJECT PAYMENT
-# -------------------------
+# ---------------- REJECT ----------------
 @app.post("/api/admin/payments/{pid}/reject")
-def reject_payment(pid: int, reason: dict):
+def reject(pid: int):
     conn = get_db()
     cur = conn.cursor()
-
-    cur.execute(
-        "UPDATE payments SET status='REJECTED' WHERE id=?",
-        (pid,)
-    )
-
+    cur.execute("UPDATE payments SET status='REJECTED' WHERE id=?", (pid,))
     conn.commit()
     conn.close()
-    return {"message": "Payment rejected", "reason": reason.get("reason")}
-
-
-# -------------------------
-# ADMIN – MONTHLY REPORT
-# -------------------------
-@app.get("/api/admin/reports/monthly")
-def monthly_report(month: str, year: str):
-    conn = get_db()
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT COALESCE(SUM(amount), 0)
-        FROM payments
-        WHERE status='APPROVED'
-        AND month=? AND year=?
-    """, (month, year))
-
-    total = cur.fetchone()[0]
-    conn.close()
-
-    return {"total": total}
+    return {"message": "Rejected"}
